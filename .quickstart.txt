@@ -1,0 +1,16 @@
+ANDROID TABLET QUICK START
+==========================
+
+Physical Tablet:
+1. Install "Expo Go" from Google Play Store
+2. Run: npm start
+3. Scan QR code with Expo Go app
+
+Android Emulator:
+1. Open Android Studio → Virtual Device Manager
+2. Start a tablet emulator
+3. Run: npm start
+4. Press 'a' in terminal
+
+For standalone APK:
+Run: npx expo build:android

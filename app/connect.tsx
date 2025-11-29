@@ -18,7 +18,11 @@ export default function ConnectScreen() {
   // Navigate to scoreboard when connected
   useEffect(() => {
     if (isConnected) {
-      router.replace('/(tabs)');
+      // Small delay to ensure router is ready
+      const timer = setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isConnected]);
 

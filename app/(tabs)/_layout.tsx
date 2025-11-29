@@ -14,10 +14,10 @@ export default function TabLayout() {
   const { isConnected } = useConnection();
 
   // Guard: redirect to connect screen if trying to access scoreboard when not connected
-  // Allow Settings tab even when disconnected
+  // Allow Settings and Rosters tabs even when disconnected
   useEffect(() => {
     const currentTab = segments[segments.length - 1];
-    const allowedWhenDisconnected = ['settings', 'connect'];
+    const allowedWhenDisconnected = ['settings', 'rosters', 'connect'];
     
     if (!isConnected && !allowedWhenDisconnected.includes(currentTab as string)) {
       router.replace('/connect');
@@ -36,6 +36,13 @@ export default function TabLayout() {
         options={{
           title: 'Scoreboard',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="sportscourt.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="rosters"
+        options={{
+          title: 'Rosters',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.3.fill" color={color} />,
         }}
       />
       <Tabs.Screen

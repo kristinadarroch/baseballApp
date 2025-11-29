@@ -1,23 +1,64 @@
+import BlueDigitalScoreboardLayout from '@/components/scoreboard/BlueDigitalScoreboardLayout';
+import ClassicScoreboardLayout from '@/components/scoreboard/ClassicScoreboardLayout';
+import DarkModernScoreboardLayout from '@/components/scoreboard/DarkModernScoreboardLayout';
+import RedLEDScoreboardLayout from '@/components/scoreboard/RedLEDScoreboardLayout';
+import { SCOREBOARD_THEMES } from '@/constants/scoreboard-themes';
 import { useConnection } from '@/contexts/ConnectionContext';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Dimensions, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
-const SCOREBOARD_GREEN = '#2d6945';
-const SCOREBOARD_DARK_GREEN = '#1a4029';
-const WHITE = '#ffffff';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = Math.min(width, height) >= 600;
 
 export default function HomeScreen() {
-  const { isConnected, disconnect, balls, strikes, outs, fullGameState, beginGame, endGame, debugRunButtonState } = useConnection();
+  const { isConnected, disconnect, balls, strikes, outs, runs, fullGameState, beginGame, endGame, debugRunButtonState, visitorTeamName, homeTeamName, visitorRoster, homeRoster, scoreboardTheme } = useConnection();
+
+  // Get theme colors
+  const themeColors = SCOREBOARD_THEMES[scoreboardTheme].colors;
 
   // Generate display arrays based on counts
   // If balls = 2, generate [1, 1, 0, 0] to show first 2 circles filled
   const ballsArray = Array.from({ length: 4 }, (_, i) => i < balls ? 1 : 0);
   const strikesArray = Array.from({ length: 3 }, (_, i) => i < strikes ? 1 : 0);
   const outsArray = Array.from({ length: 3 }, (_, i) => i < outs ? 1 : 0);
+
+  // Get current batter
+  const getCurrentBatter = () => {
+    if (!fullGameState.gameStarted) return null;
+    
+    const currentRoster = fullGameState.currentBatterTeam === 'visitor' ? visitorRoster : homeRoster;
+    const lineupPlayers = currentRoster.filter(p => p.isInLineup !== false); // Include players without isInLineup property
+    
+    if (lineupPlayers.length === 0) return null;
+    
+    // Get the correct batting position based on which team is batting
+    const batterPosition = fullGameState.currentBatterTeam === 'visitor' 
+      ? fullGameState.visitorBatterPosition 
+      : fullGameState.homeBatterPosition;
+    
+    const batterIndex = batterPosition % lineupPlayers.length;
+    return lineupPlayers[batterIndex];
+  };
+
+  const currentBatter = getCurrentBatter();
+
+  // Get inning score with real-time runs for active inning
+  const getInningScore = (team: 'visitor' | 'home', inningIndex: number) => {
+    const currentInningIndex = fullGameState.inning - 1;
+    const isActiveInning = inningIndex === currentInningIndex;
+    const isTeamBatting = fullGameState.currentBatterTeam === team;
+    const isCorrectHalf = team === 'visitor' ? fullGameState.isTopOfInning : !fullGameState.isTopOfInning;
+    
+    // Show real-time runs if this is the active team's current inning
+    if (fullGameState.gameStarted && isActiveInning && isTeamBatting && isCorrectHalf) {
+      return runs; // Show current runs in real-time
+    }
+    
+    // Otherwise show the committed score
+    const committedScores = team === 'visitor' ? fullGameState.visitorInningScores : fullGameState.homeInningScores;
+    return committedScores[inningIndex] !== undefined ? committedScores[inningIndex] : '-';
+  };
 
   // Lock to landscape orientation for scoreboard
   useEffect(() => {
@@ -28,6 +69,46 @@ export default function HomeScreen() {
       ScreenOrientation.unlockAsync();
     };
   }, []);
+
+  // Create dynamic styles based on theme
+  const styles = useMemo(() => createStyles(themeColors), [themeColors]);
+
+  // Render the appropriate scoreboard layout based on theme
+  const renderScoreboardLayout = () => {
+    const currentBatterNumber = currentBatter ? currentBatter.number : '-';
+    
+    const layoutProps = {
+      themeColors,
+      visitorTeamName,
+      homeTeamName,
+      fullGameState,
+      balls,
+      strikes,
+      outs,
+      runs,
+      currentBatterNumber,
+      isTablet,
+      getInningScore,
+    };
+
+    // Use custom layout for blue-digital theme
+    if (scoreboardTheme === 'blue-digital') {
+      return <BlueDigitalScoreboardLayout {...layoutProps} />;
+    }
+    
+    // Use custom layout for red-led theme
+    if (scoreboardTheme === 'red-led') {
+      return <RedLEDScoreboardLayout {...layoutProps} />;
+    }
+    
+    // Use custom layout for dark-modern theme
+    if (scoreboardTheme === 'dark-modern') {
+      return <DarkModernScoreboardLayout {...layoutProps} />;
+    }
+    
+    // Use classic layout for all other themes
+    return <ClassicScoreboardLayout {...layoutProps} />;
+  };
 
   return (
     <View style={styles.container}>
@@ -72,141 +153,16 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Game Status Display */}
-          {fullGameState.gameStarted && (
-            <View style={styles.gameStatusPanel}>
-              <View style={styles.inningDisplay}>
-                <Text style={styles.inningStatusText}>INNING {fullGameState.inning}</Text>
-                <Text style={styles.halfInningText}>
-                  {fullGameState.isTopOfInning ? '▲ TOP' : '▼ BOTTOM'}
-                </Text>
-              </View>
-              <View style={styles.batterDisplay}>
-                <Text style={styles.batterLabel}>AT BAT:</Text>
-                <Text style={styles.batterTeam}>
-                  {fullGameState.currentBatterTeam === 'visitor' ? 'VISITOR' : 'HOME'}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Score Grid */}
-          <View style={styles.scoreGrid}>
-            {/* Header Row - Innings */}
-            <View style={styles.headerRow}>
-              <View style={styles.teamLabel} />
-              <View style={styles.inningCell}><Text style={styles.inningText}>1</Text></View>
-              <View style={styles.inningCell}><Text style={styles.inningText}>2</Text></View>
-              <View style={styles.inningCell}><Text style={styles.inningText}>3</Text></View>
-              <View style={styles.inningCell}><Text style={styles.inningText}>4</Text></View>
-              <View style={styles.inningCell}><Text style={styles.inningText}>5</Text></View>
-              <View style={styles.inningCell}><Text style={styles.inningText}>6</Text></View>
-              <View style={styles.inningCell}><Text style={styles.inningText}>7</Text></View>
-              <View style={styles.inningCell}><Text style={styles.inningText}>8</Text></View>
-              <View style={styles.inningCell}><Text style={styles.inningText}>9</Text></View>
-              <View style={styles.runCell}><Text style={styles.runHeaderText}>R</Text></View>
-            </View>
-
-            {/* Visitor Row */}
-            <View style={styles.scoreRow}>
-              <View style={styles.teamLabel}>
-                <Text style={styles.teamText}>VISITOR</Text>
-              </View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.totalRuns}><Text style={styles.totalRunsText}>{fullGameState.visitorScore}</Text></View>
-            </View>
-
-            {/* Home Row */}
-            <View style={styles.scoreRow}>
-              <View style={styles.teamLabel}>
-                <Text style={styles.teamText}>HOME</Text>
-              </View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.inningScore}><Text style={styles.scoreText}>-</Text></View>
-              <View style={styles.totalRuns}><Text style={styles.totalRunsText}>{fullGameState.homeScore}</Text></View>
-            </View>
-          </View>
-
-          {/* Bottom Section - At Bat, Ball, Strike, Out */}
-          <View style={styles.bottomSection}>
-            {/* At Bat */}
-            <View style={styles.atBatSection}>
-              <Text style={styles.sectionLabel}>AT BAT</Text>
-              <View style={styles.atBatBox}>
-                <Text style={styles.atBatText}>-</Text>
-              </View>
-            </View>
-
-            {/* Ball */}
-            <View style={styles.indicatorSection}>
-              <Text style={styles.sectionLabel}>BALL</Text>
-              <View style={styles.indicatorRow}>
-                {ballsArray.map((ball, idx) => (
-                  <View 
-                    key={`ball-${idx}`}
-                    style={[
-                      styles.indicator,
-                      ball === 1 && styles.indicatorActive
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-
-            {/* Strike */}
-            <View style={styles.indicatorSection}>
-              <Text style={styles.sectionLabel}>STRIKE</Text>
-              <View style={styles.indicatorRow}>
-                {strikesArray.map((strike, idx) => (
-                  <View 
-                    key={`strike-${idx}`}
-                    style={[
-                      styles.indicator,
-                      strike === 1 && styles.indicatorActive
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-
-            {/* Out */}
-            <View style={styles.indicatorSection}>
-              <Text style={styles.sectionLabel}>OUT</Text>
-              <View style={styles.indicatorRow}>
-                {outsArray.map((out, idx) => (
-                  <View 
-                    key={`out-${idx}`}
-                    style={[
-                      styles.indicator,
-                      out === 1 && styles.indicatorActive
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-          </View>
+          {/* Render the appropriate scoreboard layout based on theme */}
+          {fullGameState.gameStarted && renderScoreboardLayout()}
         </ScrollView>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+// Create styles function that uses theme colors
+const createStyles = (themeColors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
@@ -215,19 +171,19 @@ const styles = StyleSheet.create({
   // Main Scoreboard
   scoreboard: {
     flex: 1,
-    backgroundColor: SCOREBOARD_GREEN,
+    backgroundColor: themeColors.background,
   },
   
   // Status Bar
   statusBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: SCOREBOARD_DARK_GREEN,
+    backgroundColor: themeColors.headerBackground,
     paddingHorizontal: 20,
     paddingVertical: 12,
     paddingTop: Platform.OS === 'ios' ? 50 : 12,
     borderBottomWidth: 3,
-    borderBottomColor: WHITE,
+    borderBottomColor: themeColors.secondaryText,
   },
   statusDot: {
     width: 16,
@@ -235,7 +191,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginRight: 10,
     borderWidth: 2,
-    borderColor: WHITE,
+    borderColor: themeColors.secondaryText,
   },
   statusConnected: {
     backgroundColor: '#00ff00',
@@ -244,7 +200,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ff0000',
   },
   statusText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 2,
@@ -273,10 +229,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: WHITE,
+    borderColor: themeColors.secondaryText,
   },
   disconnectText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: 12,
     fontWeight: 'bold',
   },
@@ -293,7 +249,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   debugLabel: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: 12,
     fontWeight: 'bold',
     marginRight: 8,
@@ -317,42 +273,43 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    padding: isTablet ? 30 : 16,
+    paddingVertical: isTablet ? 30 : 16,
     paddingBottom: 40,
   },
 
   // Game Control Panel
   gameControlPanel: {
-    backgroundColor: SCOREBOARD_DARK_GREEN,
+    backgroundColor: themeColors.headerBackground,
     padding: 30,
+    marginHorizontal: isTablet ? 30 : 16,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 30,
     borderWidth: 3,
-    borderColor: WHITE,
+    borderColor: themeColors.secondaryText,
   },
   gameControlTitle: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: 24,
     fontWeight: '900',
     marginBottom: 20,
     letterSpacing: 2,
   },
   beginGameButton: {
-    backgroundColor: WHITE,
+    backgroundColor: themeColors.secondaryText,
     paddingVertical: 16,
     paddingHorizontal: 40,
     borderRadius: 8,
     marginBottom: 15,
   },
   beginGameText: {
-    color: SCOREBOARD_GREEN,
+    color: themeColors.background,
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: 2,
   },
   gameControlHint: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: 14,
     textAlign: 'center',
     opacity: 0.8,
@@ -360,12 +317,12 @@ const styles = StyleSheet.create({
 
   // Game Status Panel
   gameStatusPanel: {
-    backgroundColor: SCOREBOARD_DARK_GREEN,
+    backgroundColor: themeColors.headerBackground,
     padding: 20,
     borderRadius: 12,
     marginBottom: 20,
     borderWidth: 3,
-    borderColor: WHITE,
+    borderColor: themeColors.secondaryText,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -375,13 +332,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inningStatusText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 28 : 22,
     fontWeight: '900',
     letterSpacing: 2,
   },
   halfInningText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 20 : 16,
     fontWeight: 'bold',
     marginTop: 4,
@@ -390,18 +347,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     borderLeftWidth: 2,
-    borderLeftColor: WHITE,
+    borderLeftColor: themeColors.secondaryText,
     paddingLeft: 20,
   },
   batterLabel: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: 14,
     fontWeight: '600',
     letterSpacing: 1,
     opacity: 0.8,
   },
   batterTeam: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 24 : 20,
     fontWeight: '900',
     letterSpacing: 2,
@@ -426,7 +383,7 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   teamText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 28 : 20,
     fontWeight: '900',
     letterSpacing: 1,
@@ -440,7 +397,7 @@ const styles = StyleSheet.create({
     marginHorizontal: isTablet ? 4 : 3,
   },
   inningText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 36 : 28,
     fontWeight: '900',
   },
@@ -450,13 +407,13 @@ const styles = StyleSheet.create({
     height: isTablet ? 65 : 55,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: SCOREBOARD_DARK_GREEN,
+    backgroundColor: themeColors.headerBackground,
     marginHorizontal: isTablet ? 4 : 3,
     borderWidth: isTablet ? 3 : 3,
-    borderColor: WHITE,
+    borderColor: themeColors.secondaryText,
   },
   scoreText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 40 : 32,
     fontWeight: '900',
   },
@@ -468,7 +425,7 @@ const styles = StyleSheet.create({
     marginLeft: isTablet ? 12 : 8,
   },
   runHeaderText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 36 : 28,
     fontWeight: '900',
   },
@@ -477,13 +434,13 @@ const styles = StyleSheet.create({
     height: isTablet ? 60 : 50,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: SCOREBOARD_DARK_GREEN,
+    backgroundColor: themeColors.headerBackground,
     marginLeft: isTablet ? 12 : 8,
     borderWidth: isTablet ? 4 : 3,
-    borderColor: WHITE,
+    borderColor: themeColors.secondaryText,
   },
   totalRunsText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 40 : 32,
     fontWeight: '900',
   },
@@ -504,7 +461,7 @@ const styles = StyleSheet.create({
     minWidth: isTablet ? 180 : 150,
   },
   sectionLabel: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 30 : 22,
     fontWeight: '900',
     letterSpacing: 1,
@@ -517,10 +474,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: isTablet ? 4 : 3,
-    borderColor: WHITE,
+    borderColor: themeColors.secondaryText,
   },
   atBatText: {
-    color: WHITE,
+    color: themeColors.secondaryText,
     fontSize: isTablet ? 50 : 40,
     fontWeight: '900',
   },
@@ -538,11 +495,11 @@ const styles = StyleSheet.create({
     width: isTablet ? 60 : 50,
     height: isTablet ? 60 : 50,
     borderRadius: isTablet ? 30 : 25,
-    backgroundColor: SCOREBOARD_DARK_GREEN,
+    backgroundColor: themeColors.headerBackground,
     borderWidth: isTablet ? 4 : 3,
-    borderColor: WHITE,
+    borderColor: themeColors.secondaryText,
   },
   indicatorActive: {
-    backgroundColor: WHITE,
+    backgroundColor: themeColors.accentColor,
   },
 });

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { DEFAULT_THEME, ScoreboardTheme } from '../constants/scoreboard-themes';
 
 // ========================================
 // ESP32 Configuration
@@ -8,6 +9,7 @@ import React, { createContext, ReactNode, useContext, useEffect, useRef, useStat
 // Can be changed in Settings screen for development
 const DEFAULT_ESP32_IP = '192.168.4.1';
 const ESP32_IP_STORAGE_KEY = '@esp32_ip_address';
+const SCOREBOARD_THEME_STORAGE_KEY = '@scoreboard_theme';
 
 export interface GameState {
   balls: number[];
@@ -23,6 +25,28 @@ export interface FullGameState {
   homeScore: number;
   currentBatterTeam: 'visitor' | 'home';
   gameStarted: boolean;
+  totalOuts: number; // Total outs from start of game
+  currentInningOuts: number; // Outs in current inning (0-6, resets each inning)
+  visitorBatterPosition: number; // 0-8 (visitor team's batting order position)
+  homeBatterPosition: number; // 0-8 (home team's batting order position)
+  visitorInningScores: number[]; // Runs per inning for visitor [inning1, inning2, ...]
+  homeInningScores: number[]; // Runs per inning for home [inning1, inning2, ...]
+}
+
+export interface AtBatLog {
+  inning: number;
+  isTop: boolean;
+  team: 'visitor' | 'home';
+  finalBalls: number;
+  finalStrikes: number;
+  result: 'out' | 'in-progress';
+  timestamp: number;
+}
+
+export interface Player {
+  number: string;
+  name: string;
+  isInLineup: boolean; // true = active lineup, false = bench/alternate
 }
 
 interface ConnectionContextType {
@@ -37,17 +61,32 @@ interface ConnectionContextType {
   fullGameState: FullGameState;
   esp32IpAddress: string;
   debugRunButtonState: number; // For debugging
+  visitorTeamName: string;
+  homeTeamName: string;
+  visitorRoster: Player[];
+  homeRoster: Player[];
+  scoreboardTheme: ScoreboardTheme;
   connect: () => void;
   disconnect: () => void;
   beginGame: () => void;
   endGame: () => void;
   setEsp32IpAddress: (ip: string) => Promise<void>;
+  setVisitorTeamName: (name: string) => Promise<void>;
+  setHomeTeamName: (name: string) => Promise<void>;
+  setVisitorRoster: (roster: Player[]) => void;
+  setHomeRoster: (roster: Player[]) => void;
+  setScoreboardTheme: (theme: ScoreboardTheme) => Promise<void>;
 }
 
 const ConnectionContext = createContext<ConnectionContextType | undefined>(undefined);
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [esp32IpAddress, setEsp32IpAddressState] = useState<string>(DEFAULT_ESP32_IP);
+  const [visitorTeamName, setVisitorTeamNameState] = useState<string>('VISITOR');
+  const [homeTeamName, setHomeTeamNameState] = useState<string>('HOME');
+  const [visitorRoster, setVisitorRosterState] = useState<Player[]>([]);
+  const [homeRoster, setHomeRosterState] = useState<Player[]>([]);
+  const [scoreboardTheme, setScoreboardThemeState] = useState<ScoreboardTheme>(DEFAULT_THEME);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [balls, setBalls] = useState<number>(0);
   const [strikes, setStrikes] = useState<number>(0);
@@ -63,7 +102,16 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     homeScore: 0,
     currentBatterTeam: 'visitor',
     gameStarted: false,
+    totalOuts: 0,
+    currentInningOuts: 0,
+    visitorBatterPosition: 0, // Start with first batter
+    homeBatterPosition: 0, // Start with first batter
+    visitorInningScores: [], // Runs per inning
+    homeInningScores: [], // Runs per inning
   });
+
+  // At-bat logging
+  const [atBatLog, setAtBatLog] = useState<AtBatLog[]>([]);
 
   // Track previous button states to detect press events (rising edge 0->1)
   const [prevBallState, setPrevBallState] = useState<number[]>([0, 0, 0, 0]);
@@ -73,6 +121,16 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   // Use ref for run state to avoid async state update issues
   const prevRunStateRef = useRef<number>(0);
   
+  // Track if we've initialized the run button (to handle startup state)
+  const runButtonInitializedRef = useRef<boolean>(false);
+  
+  // Track runs scored in current half-inning (before it's committed to inning scores)
+  const currentHalfInningRunsRef = useRef<number>(0);
+  
+  // Track previous out/run counts to detect increments (for batter advancement)
+  const prevOutCountRef = useRef<number>(0);
+  const prevRunCountRef = useRef<number>(0);
+  
   // Flag to prevent concurrent fetches
   const isFetchingRef = useRef<boolean>(false);
   
@@ -81,7 +139,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const strikeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
@@ -89,6 +147,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   // Load saved IP address on mount
   useEffect(() => {
     loadSavedIpAddress();
+    loadSavedTheme();
   }, []);
 
   const loadSavedIpAddress = async () => {
@@ -105,6 +164,20 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loadSavedTheme = async () => {
+    try {
+      const savedTheme = await AsyncStorage.getItem(SCOREBOARD_THEME_STORAGE_KEY);
+      if (savedTheme && (savedTheme as ScoreboardTheme)) {
+        console.log(`Loaded saved scoreboard theme: ${savedTheme}`);
+        setScoreboardThemeState(savedTheme as ScoreboardTheme);
+      } else {
+        console.log(`Using default theme: ${DEFAULT_THEME}`);
+      }
+    } catch (error) {
+      console.error('Error loading scoreboard theme:', error);
+    }
+  };
+
   const setEsp32IpAddress = async (ip: string) => {
     try {
       await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, ip);
@@ -117,6 +190,39 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Error saving IP address:', error);
+      throw error;
+    }
+  };
+
+  const setVisitorTeamName = async (name: string) => {
+    const trimmedName = name.trim().toUpperCase();
+    setVisitorTeamNameState(trimmedName);
+    console.log(`Set visitor team name: ${trimmedName}`);
+  };
+
+  const setHomeTeamName = async (name: string) => {
+    const trimmedName = name.trim().toUpperCase();
+    setHomeTeamNameState(trimmedName);
+    console.log(`Set home team name: ${trimmedName}`);
+  };
+
+  const setVisitorRoster = (roster: Player[]) => {
+    setVisitorRosterState(roster);
+    console.log(`Visitor roster updated: ${roster.length} players`);
+  };
+
+  const setHomeRoster = (roster: Player[]) => {
+    setHomeRosterState(roster);
+    console.log(`Home roster updated: ${roster.length} players`);
+  };
+
+  const setScoreboardTheme = async (theme: ScoreboardTheme) => {
+    try {
+      await AsyncStorage.setItem(SCOREBOARD_THEME_STORAGE_KEY, theme);
+      setScoreboardThemeState(theme);
+      console.log(`Saved scoreboard theme: ${theme}`);
+    } catch (error) {
+      console.error('Error saving scoreboard theme:', error);
       throw error;
     }
   };
@@ -217,15 +323,24 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       }
       setPrevStrikeState(data.strikes);
       
-      // Check outs for button press or reset (with debounce for rotary switches)
+      // Check outs for button press or reset (SIMPLIFIED)
       const allOutsZero = data.outs.every(o => o === 0);
       if (allOutsZero) {
-        // All switches off - but wait 200ms before resetting (debounce for rotary switch transitions)
+        // All switches off - debounce before resetting
         if (!outResetTimerRef.current) {
           outResetTimerRef.current = setTimeout(() => {
             setOuts(prev => {
+              const wasThreeOuts = prev === 3;
               if (prev !== 0) {
-                console.log(`All out buttons released (sustained), resetting count to 0`);
+                console.log(`Outs resetting from ${prev} to 0`);
+                
+                // SIMPLE RULE: If outs was 3, now going to 0 → change inning
+                if (wasThreeOuts) {
+                  console.log(`⚾⚾⚾ INNING CHANGE: Outs went 3→0 ⚾⚾⚾`);
+                  // Advance inning after state update completes
+                  setTimeout(() => advanceInning(), 50);
+                }
+                
                 return 0;
               }
               return prev;
@@ -240,16 +355,30 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           outResetTimerRef.current = null;
         }
         
+        // Check for button presses - record the out count and advance batter if increased
         data.outs.forEach((current, index) => {
           if (current === 1 && prevOutState[index] === 0) {
             const newCount = index + 1;
-            console.log(`Out button ${index + 1} pressed, setting count to ${newCount}`);
+            console.log(`⚾ Out ${newCount} recorded`);
             setOuts(newCount);
             
-            // Check if this is the 3rd out - switch teams/innings
-            if (newCount === 3) {
-              console.log(`3 outs - switching teams`);
-              handleThreeOuts();
+            // Check if this is a NEW out (count increased from previous)
+            if (newCount > prevOutCountRef.current && fullGameState.gameStarted) {
+              console.log(`Out count increased: ${prevOutCountRef.current} → ${newCount}. Advancing batter.`);
+              prevOutCountRef.current = newCount; // Update BEFORE advancing to prevent duplicates
+              
+              // Advance batter immediately
+              setFullGameState(prevState => {
+                const isVisitor = prevState.currentBatterTeam === 'visitor';
+                const currentPos = isVisitor ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
+                const nextPos = (currentPos + 1) % 9;
+                
+                console.log(`   Batter #${currentPos + 1} → Batter #${nextPos + 1} (OUT)`);
+                
+                return isVisitor
+                  ? { ...prevState, visitorBatterPosition: nextPos }
+                  : { ...prevState, homeBatterPosition: nextPos };
+              });
             }
           }
         });
@@ -258,32 +387,70 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       
       // Check run button for toggle (latch)
       // Run button toggles: high→low OR low→high both count as 1 run
-      // Press once → goes high (1) = 1 run
-      // Press again → goes low (0) = 1 run
-      // Use ref for immediate tracking to prevent double-counting
+      // IMPORTANT: On game startup, button might be high or low - we need to capture
+      // the initial state WITHOUT counting it as a run, then count only CHANGES
       const currentRunState = data.run;
       const previousRunState = prevRunStateRef.current;
       
       // Update debug display
       setDebugRunButtonState(currentRunState);
       
-      if (currentRunState !== previousRunState) {
+      // Check if this is first read after game start
+      if (!runButtonInitializedRef.current) {
+        // First read - just capture the current state, don't count as a run
+        prevRunStateRef.current = currentRunState;
+        runButtonInitializedRef.current = true;
+        console.log(`🎮 Run button initialized at startup: state = ${currentRunState} (${currentRunState === 1 ? 'HIGH' : 'LOW'})`);
+      } else if (currentRunState !== previousRunState) {
+        // State changed (either 0→1 or 1→0) - this is a real run!
         // Update ref IMMEDIATELY to prevent duplicate detections
         prevRunStateRef.current = currentRunState;
         
-        // State changed (either 0→1 or 1→0)
-        setRuns(prevRuns => prevRuns + 1);
+        // Increment run count
+        const newRunCount = runs + 1;
+        setRuns(newRunCount);
         
-        // Add run to appropriate team's score
-        setFullGameState(prevState => ({
-          ...prevState,
-          visitorScore: prevState.currentBatterTeam === 'visitor' 
-            ? prevState.visitorScore + 1 
-            : prevState.visitorScore,
-          homeScore: prevState.currentBatterTeam === 'home' 
-            ? prevState.homeScore + 1 
-            : prevState.homeScore,
-        }));
+        // Track run for current half-inning
+        currentHalfInningRunsRef.current += 1;
+        console.log(`⚾ Run scored! Half-inning runs: ${currentHalfInningRunsRef.current}`);
+        
+        // Check if run count increased and advance batter
+        if (newRunCount > prevRunCountRef.current && fullGameState.gameStarted) {
+          console.log(`   Run count increased: ${prevRunCountRef.current} → ${newRunCount}. Advancing batter.`);
+          prevRunCountRef.current = newRunCount; // Update BEFORE advancing to prevent duplicates
+          
+          // Add run to score AND advance batter
+          setFullGameState(prevState => {
+            const isVisitor = prevState.currentBatterTeam === 'visitor';
+            const currentPos = isVisitor ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
+            const nextPos = (currentPos + 1) % 9;
+            
+            console.log(`   Batter #${currentPos + 1} → Batter #${nextPos + 1} (RUN)`);
+            
+            return {
+              ...prevState,
+              visitorScore: prevState.currentBatterTeam === 'visitor' 
+                ? prevState.visitorScore + 1 
+                : prevState.visitorScore,
+              homeScore: prevState.currentBatterTeam === 'home' 
+                ? prevState.homeScore + 1 
+                : prevState.homeScore,
+              visitorBatterPosition: isVisitor ? nextPos : prevState.visitorBatterPosition,
+              homeBatterPosition: isVisitor ? prevState.homeBatterPosition : nextPos,
+            };
+          });
+        } else {
+          // Just add the run to score without advancing batter
+          setFullGameState(prevState => ({
+            ...prevState,
+            visitorScore: prevState.currentBatterTeam === 'visitor' 
+              ? prevState.visitorScore + 1 
+              : prevState.visitorScore,
+            homeScore: prevState.currentBatterTeam === 'home' 
+              ? prevState.homeScore + 1 
+              : prevState.homeScore,
+          }));
+        }
       }
       
       setIsConnected(true);
@@ -310,37 +477,167 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setPollInterval(interval);
   };
 
-  // Handle 3 outs - switch teams or innings
-  const handleThreeOuts = () => {
+  // SIMPLIFIED: Advance inning when umpire resets from 3 outs to 0
+  const advanceInning = () => {
+    const runsThisHalfInning = currentHalfInningRunsRef.current;
+    
     setFullGameState(prevState => {
+      const inningOutCount = prevState.currentInningOuts + 3; // Add the 3 outs we just completed
+      
+      // Top half complete (visitor done batting)
       if (prevState.isTopOfInning) {
-        // Top of inning complete, switch to bottom (home team bats)
-        console.log(`Top of inning ${prevState.inning} complete. Home team now batting.`);
+        console.log(`✅ Top of inning ${prevState.inning} complete. Visitor scored ${runsThisHalfInning} runs.`);
+        
+        // Update visitor inning scores
+        const updatedVisitorScores = [...prevState.visitorInningScores];
+        updatedVisitorScores[prevState.inning - 1] = runsThisHalfInning;
+        
+        // Reset runs counter for home team
+        currentHalfInningRunsRef.current = 0;
+        
+        // Switch to bottom of inning (home team bats)
         return {
           ...prevState,
+          totalOuts: prevState.totalOuts + 3,
+          currentInningOuts: inningOutCount,
           isTopOfInning: false,
           currentBatterTeam: 'home',
+          visitorInningScores: updatedVisitorScores,
         };
-      } else {
-        // Bottom of inning complete, move to next inning
-        const nextInning = prevState.inning + 1;
-        console.log(`Inning ${prevState.inning} complete. Moving to inning ${nextInning}. Visitor team now batting.`);
+      }
+      // Bottom half complete (home done batting)
+      else {
+        console.log(`✅ Bottom of inning ${prevState.inning} complete. Home scored ${runsThisHalfInning} runs.`);
+        
+        // Update home inning scores
+        const updatedHomeScores = [...prevState.homeInningScores];
+        updatedHomeScores[prevState.inning - 1] = runsThisHalfInning;
+        
+        // Reset runs counter for next inning
+        currentHalfInningRunsRef.current = 0;
+        
+        // Move to next inning (visitor bats)
         return {
           ...prevState,
-          inning: nextInning,
+          totalOuts: prevState.totalOuts + 3,
+          currentInningOuts: 0, // Reset for new inning
+          inning: prevState.inning + 1,
           isTopOfInning: true,
           currentBatterTeam: 'visitor',
+          homeInningScores: updatedHomeScores,
         };
       }
     });
     
-    // Reset per-half-inning counts after 3 outs
-    // Note: Operator should release buttons, but we help by resetting
+    // Reset per-at-bat counts and refs
     setTimeout(() => {
       setBalls(0);
       setStrikes(0);
       setOuts(0);
-      setRuns(0); // Runs reset per half-inning
+      setRuns(0);
+      prevOutCountRef.current = 0;  // Reset so 0 doesn't trigger advancement
+      prevRunCountRef.current = 0;  // Reset so 0 doesn't trigger advancement
+    }, 100);
+  };
+
+  // OLD COMPLEX FUNCTION - keeping for now but will be replaced
+  const handleThreeOuts = (finalBalls: number, finalStrikes: number) => {
+    setFullGameState(prevState => {
+      const newTotalOuts = prevState.totalOuts + 1;
+      const newInningOuts = prevState.currentInningOuts + 1;
+      
+      console.log(`Out recorded: Total outs: ${newTotalOuts}, Inning outs: ${newInningOuts}`);
+      
+      // Log the at-bat
+      const atBatEntry: AtBatLog = {
+        inning: prevState.inning,
+        isTop: prevState.isTopOfInning,
+        team: prevState.currentBatterTeam,
+        finalBalls,
+        finalStrikes,
+        result: 'out',
+        timestamp: Date.now(),
+      };
+      setAtBatLog(prev => [...prev, atBatEntry]);
+      console.log(`At-bat logged: Inning ${atBatEntry.inning} ${atBatEntry.isTop ? 'Top' : 'Bottom'}, ${atBatEntry.team}, Result: out`);
+      
+      // Advance batter for the team that made the out
+      const isVisitorBatting = prevState.currentBatterTeam === 'visitor';
+      const currentPosition = isVisitorBatting ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
+      const nextBatterPosition = (currentPosition + 1) % 9;
+      
+      console.log(`${prevState.currentBatterTeam} batter completed at-bat. Advancing from position ${currentPosition + 1} to ${nextBatterPosition + 1}`);
+      
+      // Update the correct team's batting position
+      const updatedState = isVisitorBatting
+        ? { ...prevState, visitorBatterPosition: nextBatterPosition }
+        : { ...prevState, homeBatterPosition: nextBatterPosition };
+
+      // Check if we need to advance half-inning or full inning
+      // Every 3 outs = switch teams (half inning)
+      // Every 6 outs = next inning
+      if (newInningOuts === 3) {
+        // 3 outs in this inning - switch to bottom half
+        // Commit visitor's runs for this inning
+        const runsThisHalfInning = currentHalfInningRunsRef.current;
+        console.log(`Top of inning ${prevState.inning} complete (3 outs). Visitor scored ${runsThisHalfInning} runs.`);
+        console.log(`Home team now batting at position ${updatedState.homeBatterPosition + 1}.`);
+        
+        // Update visitor inning scores
+        const updatedVisitorScores = [...prevState.visitorInningScores];
+        updatedVisitorScores[prevState.inning - 1] = runsThisHalfInning;
+        
+        // Reset half-inning runs counter for home team
+        currentHalfInningRunsRef.current = 0;
+        
+        return {
+          ...updatedState,
+          totalOuts: newTotalOuts,
+          currentInningOuts: newInningOuts,
+          isTopOfInning: false,
+          currentBatterTeam: 'home',
+          visitorInningScores: updatedVisitorScores,
+        };
+      } else if (newInningOuts === 6) {
+        // 6 outs in this inning - advance to next inning
+        // Commit home's runs for this inning
+        const runsThisHalfInning = currentHalfInningRunsRef.current;
+        const nextInning = prevState.inning + 1;
+        console.log(`Inning ${prevState.inning} complete (6 outs). Home scored ${runsThisHalfInning} runs.`);
+        console.log(`Moving to inning ${nextInning}. Visitor team now batting at position ${updatedState.visitorBatterPosition + 1}.`);
+        
+        // Update home inning scores
+        const updatedHomeScores = [...prevState.homeInningScores];
+        updatedHomeScores[prevState.inning - 1] = runsThisHalfInning;
+        
+        // Reset half-inning runs counter for next inning
+        currentHalfInningRunsRef.current = 0;
+        
+        return {
+          ...updatedState,
+          totalOuts: newTotalOuts,
+          currentInningOuts: 0, // Reset inning outs
+          inning: nextInning,
+          isTopOfInning: true,
+          currentBatterTeam: 'visitor',
+          homeInningScores: updatedHomeScores,
+        };
+      } else {
+        // Still in same half-inning
+        return {
+          ...updatedState,
+          totalOuts: newTotalOuts,
+          currentInningOuts: newInningOuts,
+        };
+      }
+    });
+    
+    // Reset per-at-bat counts after out
+    setTimeout(() => {
+      setBalls(0);
+      setStrikes(0);
+      setOuts(0);
+      // Runs stay (accumulate throughout half-inning)
     }, 100);
   };
 
@@ -354,7 +651,14 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       homeScore: 0,
       currentBatterTeam: 'visitor',
       gameStarted: true,
+      totalOuts: 0,
+      currentInningOuts: 0,
+      visitorBatterPosition: 0,
+      homeBatterPosition: 0,
+      visitorInningScores: [],
+      homeInningScores: [],
     });
+    setAtBatLog([]); // Clear at-bat log
     setBalls(0);
     setStrikes(0);
     setOuts(0);
@@ -363,11 +667,16 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setPrevStrikeState([0, 0, 0]);
     setPrevOutState([0, 0, 0]);
     prevRunStateRef.current = 0;
+    runButtonInitializedRef.current = false;  // Reset run button initialization
+    currentHalfInningRunsRef.current = 0;  // Reset half-inning runs
+    prevOutCountRef.current = 0;  // Reset out count tracking
+    prevRunCountRef.current = 0;  // Reset run count tracking
+    console.log('Game started. Batter advances on OUT or RUN.');
   };
 
   // End the current game
   const endGame = () => {
-    console.log('Ending game');
+    console.log(`Ending game. Total outs recorded: ${fullGameState.totalOuts}, At-bats logged: ${atBatLog.length}`);
     setFullGameState({
       inning: 1,
       isTopOfInning: true,
@@ -375,11 +684,22 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       homeScore: 0,
       currentBatterTeam: 'visitor',
       gameStarted: false,
+      totalOuts: 0,
+      currentInningOuts: 0,
+      visitorBatterPosition: 0,
+      homeBatterPosition: 0,
+      visitorInningScores: [],
+      homeInningScores: [],
     });
+    setAtBatLog([]); // Clear at-bat log
     setBalls(0);
     setStrikes(0);
     setOuts(0);
     setRuns(0);
+    runButtonInitializedRef.current = false;  // Reset run button initialization
+    currentHalfInningRunsRef.current = 0;  // Reset half-inning runs
+    prevOutCountRef.current = 0;  // Reset out count tracking
+    prevRunCountRef.current = 0;  // Reset run count tracking
   };
 
   const disconnect = () => {
@@ -448,11 +768,21 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         fullGameState,
         esp32IpAddress,
         debugRunButtonState,
+        visitorTeamName,
+        homeTeamName,
+        visitorRoster,
+        homeRoster,
+        scoreboardTheme,
         connect, 
         disconnect,
         beginGame,
         endGame,
         setEsp32IpAddress,
+        setVisitorTeamName,
+        setHomeTeamName,
+        setVisitorRoster,
+        setHomeRoster,
+        setScoreboardTheme,
       }}
     >
       {children}

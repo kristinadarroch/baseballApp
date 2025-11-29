@@ -1,13 +1,27 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SCOREBOARD_THEMES } from '../../constants/scoreboard-themes';
 import { useConnection } from '../../contexts/ConnectionContext';
 
 const SCOREBOARD_GREEN = '#2d6945';
 const WHITE = '#FFFFFF';
 
 export default function SettingsScreen() {
-  const { esp32IpAddress, setEsp32IpAddress, isConnected } = useConnection();
+  const { 
+    esp32IpAddress, 
+    setEsp32IpAddress, 
+    isConnected, 
+    visitorTeamName, 
+    homeTeamName, 
+    setVisitorTeamName, 
+    setHomeTeamName,
+    scoreboardTheme,
+    setScoreboardTheme,
+  } = useConnection();
+  
   const [ipInput, setIpInput] = useState(esp32IpAddress);
+  const [visitorInput, setVisitorInput] = useState(visitorTeamName);
+  const [homeInput, setHomeInput] = useState(homeTeamName);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -77,6 +91,54 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleSaveTeamNames = async () => {
+    if (!visitorInput.trim() || !homeInput.trim()) {
+      Alert.alert(
+        'Team Names Required',
+        'Please enter names for both teams',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await setVisitorTeamName(visitorInput);
+      await setHomeTeamName(homeInput);
+      Alert.alert(
+        'Teams Updated',
+        'Team names have been updated successfully!',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        'Failed to save team names. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetTeamNames = () => {
+    Alert.alert(
+      'Reset Team Names?',
+      'This will reset team names to VISITOR and HOME',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            setVisitorInput('VISITOR');
+            setHomeInput('HOME');
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
@@ -128,6 +190,117 @@ export default function SettingsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Team Names Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>⚾ Team Names</Text>
+          
+          <Text style={styles.label}>Visitor Team</Text>
+          <TextInput
+            style={styles.input}
+            value={visitorInput}
+            onChangeText={setVisitorInput}
+            placeholder="VISITOR"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={15}
+          />
+
+          <Text style={[styles.label, { marginTop: 16 }]}>Home Team</Text>
+          <TextInput
+            style={styles.input}
+            value={homeInput}
+            onChangeText={setHomeInput}
+            placeholder="HOME"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={15}
+          />
+
+          <Text style={styles.helpText}>
+            Team names will appear on the scoreboard (max 15 characters)
+          </Text>
+
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.button, styles.resetButton]}
+              onPress={handleResetTeamNames}
+              disabled={isSaving}
+            >
+              <Text style={styles.resetButtonText}>Reset Names</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, styles.saveButton]}
+              onPress={handleSaveTeamNames}
+              disabled={isSaving}
+            >
+              <Text style={styles.saveButtonText}>
+                {isSaving ? 'Saving...' : 'Apply'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Scoreboard Theme Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🎨 Scoreboard Theme</Text>
+          
+          <Text style={styles.helpText}>
+            Choose a visual style for your scoreboard display
+          </Text>
+
+          {Object.values(SCOREBOARD_THEMES).map((theme) => (
+            <TouchableOpacity
+              key={theme.id}
+              style={[
+                styles.themeCard,
+                scoreboardTheme === theme.id && styles.themeCardSelected,
+                { backgroundColor: theme.colors.background }
+              ]}
+              onPress={async () => {
+                try {
+                  await setScoreboardTheme(theme.id);
+                  Alert.alert(
+                    'Theme Updated',
+                    `Scoreboard theme changed to "${theme.name}"`,
+                    [{ text: 'OK' }]
+                  );
+                } catch (error) {
+                  Alert.alert(
+                    'Error',
+                    'Failed to save theme. Please try again.',
+                    [{ text: 'OK' }]
+                  );
+                }
+              }}
+            >
+              <View style={styles.themeHeader}>
+                <Text style={[styles.themeName, { color: theme.colors.secondaryText }]}>
+                  {theme.name}
+                </Text>
+                {scoreboardTheme === theme.id && (
+                  <Text style={[styles.themeCheckmark, { color: theme.colors.accentColor }]}>✓</Text>
+                )}
+              </View>
+              <Text style={[styles.themeDescription, { color: theme.colors.secondaryText }]}>
+                {theme.description}
+              </Text>
+              
+              {/* Preview indicators */}
+              <View style={styles.themePreview}>
+                <View style={styles.themePreviewRow}>
+                  <View style={[styles.themeIndicator, { backgroundColor: theme.colors.ballIndicator }]} />
+                  <View style={[styles.themeIndicator, { backgroundColor: theme.colors.strikeIndicator }]} />
+                  <View style={[styles.themeIndicator, { backgroundColor: theme.colors.outIndicator }]} />
+                </View>
+                <Text style={[styles.themeScorePreview, { color: theme.colors.primaryText }]}>
+                  88
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Configuration Modes Section */}
@@ -316,6 +489,7 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 22,
   },
+  
   infoSection: {
     padding: 20,
     alignItems: 'center',
@@ -325,6 +499,58 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  
+  // Theme card styles
+  themeCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 3,
+    borderColor: 'transparent',
+  },
+  themeCardSelected: {
+    borderColor: '#FFD700',
+    borderWidth: 3,
+  },
+  themeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  themeName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  themeCheckmark: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  themeDescription: {
+    fontSize: 14,
+    opacity: 0.8,
+    marginBottom: 12,
+  },
+  themePreview: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  themePreviewRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  themeIndicator: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  themeScorePreview: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    fontFamily: 'Courier',
   },
 });
 

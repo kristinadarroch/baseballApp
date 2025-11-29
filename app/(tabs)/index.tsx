@@ -12,7 +12,7 @@ const { width, height } = Dimensions.get('window');
 const isTablet = Math.min(width, height) >= 600;
 
 export default function HomeScreen() {
-  const { isConnected, disconnect, balls, strikes, outs, runs, fullGameState, beginGame, endGame, debugRunButtonState, visitorTeamName, homeTeamName, visitorRoster, homeRoster, scoreboardTheme } = useConnection();
+  const { isConnected, disconnect, balls, strikes, outs, runs, fullGameState, beginGame, endGame, visitorTeamName, homeTeamName, visitorRoster, homeRoster, scoreboardTheme, gameElapsedTime } = useConnection();
 
   // Get theme colors
   const themeColors = SCOREBOARD_THEMES[scoreboardTheme].colors;
@@ -73,6 +73,13 @@ export default function HomeScreen() {
   // Create dynamic styles based on theme
   const styles = useMemo(() => createStyles(themeColors), [themeColors]);
 
+  // Format elapsed time as MM:SS
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Render the appropriate scoreboard layout based on theme
   const renderScoreboardLayout = () => {
     const currentBatterNumber = currentBatter ? currentBatter.number : '-';
@@ -118,15 +125,15 @@ export default function HomeScreen() {
         <View style={styles.statusBar}>
           <View style={[styles.statusDot, isConnected ? styles.statusConnected : styles.statusDisconnected]} />
           <Text style={styles.statusText}>{isConnected ? 'LIVE' : 'OFFLINE'}</Text>
-          
-          {/* DEBUG: Run Button State */}
-          <View style={styles.debugDisplay}>
-            <Text style={styles.debugLabel}>RUN BTN:</Text>
-            <Text style={[styles.debugValue, debugRunButtonState === 1 ? styles.debugHigh : styles.debugLow]}>
-              {debugRunButtonState === 1 ? 'HIGH (1)' : 'LOW (0)'}
-            </Text>
-          </View>
-          
+
+          {/* Game Timer */}
+          {fullGameState.gameStarted && (
+            <View style={styles.timerDisplay}>
+              <Text style={styles.timerLabel}>TIME:</Text>
+              <Text style={styles.timerValue}>{formatTime(gameElapsedTime)}</Text>
+            </View>
+          )}
+
           <View style={styles.statusBarRight}>
             {fullGameState.gameStarted && (
               <TouchableOpacity style={styles.endGameBtn} onPress={endGame}>
@@ -237,39 +244,33 @@ const createStyles = (themeColors: any) => StyleSheet.create({
     fontWeight: 'bold',
   },
   
-  // Debug Display
-  debugDisplay: {
+  // Timer Display
+  timerDisplay: {
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 20,
     padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 100, 200, 0.3)',
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: themeColors.secondaryText,
+    marginRight: 20,
   },
-  debugLabel: {
+  timerLabel: {
     color: themeColors.secondaryText,
     fontSize: 12,
     fontWeight: 'bold',
     marginRight: 8,
     opacity: 0.8,
   },
-  debugValue: {
-    fontSize: 14,
+  timerValue: {
+    color: themeColors.secondaryText,
+    fontSize: 16,
     fontWeight: '900',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 3,
-  },
-  debugHigh: {
-    color: '#00ff00',
-    backgroundColor: 'rgba(0, 255, 0, 0.2)',
-  },
-  debugLow: {
-    color: '#888',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
 
   scrollContent: {

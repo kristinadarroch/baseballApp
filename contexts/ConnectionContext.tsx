@@ -66,6 +66,7 @@ interface ConnectionContextType {
   visitorRoster: Player[];
   homeRoster: Player[];
   scoreboardTheme: ScoreboardTheme;
+  gameElapsedTime: number; // Elapsed time in seconds
   connect: () => void;
   disconnect: () => void;
   beginGame: () => void;
@@ -143,6 +144,11 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+
+  // Game timer state
+  const [gameElapsedTime, setGameElapsedTime] = useState<number>(0); // in seconds
+  const gameStartTimeRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load saved IP address on mount
   useEffect(() => {
@@ -671,12 +677,36 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     currentHalfInningRunsRef.current = 0;  // Reset half-inning runs
     prevOutCountRef.current = 0;  // Reset out count tracking
     prevRunCountRef.current = 0;  // Reset run count tracking
-    console.log('Game started. Batter advances on OUT or RUN.');
+
+    // Start game timer
+    gameStartTimeRef.current = Date.now();
+    setGameElapsedTime(0);
+
+    // Update timer every second
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+    timerIntervalRef.current = setInterval(() => {
+      if (gameStartTimeRef.current) {
+        const elapsed = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+        setGameElapsedTime(elapsed);
+      }
+    }, 1000);
+
+    console.log('Game started. Batter advances on OUT or RUN. Timer started.');
   };
 
   // End the current game
   const endGame = () => {
     console.log(`Ending game. Total outs recorded: ${fullGameState.totalOuts}, At-bats logged: ${atBatLog.length}`);
+
+    // Stop game timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    gameStartTimeRef.current = null;
+
     setFullGameState({
       inning: 1,
       isTopOfInning: true,
@@ -700,6 +730,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     currentHalfInningRunsRef.current = 0;  // Reset half-inning runs
     prevOutCountRef.current = 0;  // Reset out count tracking
     prevRunCountRef.current = 0;  // Reset run count tracking
+
+    console.log('Game ended. Timer stopped.');
   };
 
   const disconnect = () => {
@@ -751,15 +783,19 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       if (outResetTimerRef.current) {
         clearTimeout(outResetTimerRef.current);
       }
+      // Clear game timer
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
     };
   }, [pollInterval]);
 
   return (
-    <ConnectionContext.Provider 
-      value={{ 
-        isConnected, 
-        isLoading, 
-        error, 
+    <ConnectionContext.Provider
+      value={{
+        isConnected,
+        isLoading,
+        error,
         gameState,
         balls,
         strikes,
@@ -773,7 +809,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         visitorRoster,
         homeRoster,
         scoreboardTheme,
-        connect, 
+        gameElapsedTime,
+        connect,
         disconnect,
         beginGame,
         endGame,

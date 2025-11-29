@@ -140,7 +140,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const strikeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [isConnected, setIsConnected] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);

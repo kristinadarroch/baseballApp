@@ -1,5 +1,5 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -12,17 +12,47 @@ export default function TabLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { isConnected } = useConnection();
+  const hasNavigatedRef = useRef(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Mark as mounted after first render
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Guard: redirect to connect screen if trying to access scoreboard when not connected
   // Allow Settings and Rosters tabs even when disconnected
   useEffect(() => {
+    // Don't navigate until component is mounted and router is ready
+    if (!isMounted) {
+      return;
+    }
+
     const currentTab = segments[segments.length - 1];
+    if (!currentTab) {
+      return;
+    }
+
     const allowedWhenDisconnected = ['settings', 'rosters', 'connect'];
     
-    if (!isConnected && !allowedWhenDisconnected.includes(currentTab as string)) {
-      router.replace('/connect');
+    if (!isConnected && !allowedWhenDisconnected.includes(currentTab as string) && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true;
+      const timer = setTimeout(() => {
+        try {
+          router.replace('/connect');
+        } catch (err) {
+          console.error('Navigation error in TabLayout:', err);
+          hasNavigatedRef.current = false;
+        }
+      }, 200);
+
+      return () => {
+        clearTimeout(timer);
+      };
+    } else if (isConnected) {
+      hasNavigatedRef.current = false;
     }
-  }, [isConnected, segments]);
+  }, [isConnected, segments, router, isMounted]);
 
   return (
     <Tabs

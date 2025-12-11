@@ -301,3 +301,5 @@ The new game logic:
 
 This ensures the app always knows the correct inning and teams, even if the umpire forgets to advance their physical indicator!
 
+
+

@@ -5,8 +5,8 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
@@ -15,7 +15,12 @@
     "build:android": "eas build --platform android --profile production",
     "build:android:preview": "eas build --platform android --profile preview",
     "build:ios": "eas build --platform ios --profile production",
-    "build:status": "eas build:list"
+    "build:status": "eas build:list",
+    "build:android:local": "npx expo run:android --variant release --no-install",
+    "build:android:local:debug": "npx expo run:android --variant debug --no-install",
+    "install:android": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
+    "install:android:debug": "adb install -r android/app/build/outputs/apk/debug/app-debug.apk",
+    "build:install:android": "npm run build:android:local && npm run install:android"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

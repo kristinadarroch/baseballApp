@@ -1,6 +1,6 @@
 import { useConnection } from '@/contexts/ConnectionContext';
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const SCOREBOARD_GREEN = '#2d6945';
@@ -10,21 +10,31 @@ const WHITE = '#ffffff';
 export default function ConnectScreen() {
   const router = useRouter();
   const { isConnected, isLoading, error, connect, esp32IpAddress } = useConnection();
+  const hasNavigatedRef = useRef(false);
 
   const navigateToSettings = () => {
-    router.push('/(tabs)/settings');
+    try {
+      router.push('/(tabs)/settings');
+    } catch (err) {
+      console.error('Navigation error:', err);
+    }
   };
 
   // Navigate to scoreboard when connected
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected && !hasNavigatedRef.current) {
       // Small delay to ensure router is ready
       const timer = setTimeout(() => {
-        router.replace('/(tabs)');
+        if (isConnected && !hasNavigatedRef.current) {
+          hasNavigatedRef.current = true;
+          router.replace('/(tabs)');
+        }
       }, 100);
       return () => clearTimeout(timer);
+    } else if (!isConnected) {
+      hasNavigatedRef.current = false;
     }
-  }, [isConnected]);
+  }, [isConnected, router]);
 
   return (
     <View style={styles.container}>

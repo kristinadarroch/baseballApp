@@ -9,7 +9,7 @@
 // Pin assignments
 const int ballPins[4]   = {20, 8, 9, 10};
 const int strikePins[3] = {5, 6, 7};
-const int outPins[3]    = {2, 3, 4};
+const int outPins[3]    = {3, 2, 4};
 const int runPin        = 21;
 const int configButton  = 0; // BOOT button for config mode
 
@@ -27,6 +27,19 @@ WebServer server(80);
 // WiFi mode flags
 bool isAPMode = false;
 bool isConfigMode = false;
+
+// Stable counts (debounced - what we report)
+int stableBalls   = 0;
+int stableStrikes = 0;
+int stableOuts    = 0;
+int stableRun     = 0;
+
+// Previous sample for debouncing
+int lastSampleBalls   = -1;
+int lastSampleStrikes = -1;
+int lastSampleOuts    = -1;
+int lastSampleRun     = -1;
+bool lastSampleValid  = false;
 
 void setup() {
   Serial.begin(115200);
@@ -285,23 +298,35 @@ void handleReset() {
   ESP.restart();
 }
 
+// Read a group of pins and return count (highest pressed index + 1)
+int readGroupCount(const int *pins, int length) {
+  int count = 0;
+  for (int i = 0; i < length; i++) {
+    if (digitalRead(pins[i]) == LOW) {  // LOW = pressed (INPUT_PULLUP)
+      count = i + 1;
+    }
+  }
+  return count;
+}
+
 void handleStatus() {
+  // Position-based arrays: count=2 means [0,1,0,0] (only active position is 1)
   String json = "{\"balls\":[";
   for (int i = 0; i < 4; i++) {
-    json += String(digitalRead(ballPins[i]) == LOW ? 1 : 0);
+    json += String(((i + 1) == stableBalls) ? 1 : 0);
     if (i < 3) json += ",";
   }
   json += "],\"strikes\":[";
   for (int i = 0; i < 3; i++) {
-    json += String(digitalRead(strikePins[i]) == LOW ? 1 : 0);
+    json += String(((i + 1) == stableStrikes) ? 1 : 0);
     if (i < 2) json += ",";
   }
   json += "],\"outs\":[";
   for (int i = 0; i < 3; i++) {
-    json += String(digitalRead(outPins[i]) == LOW ? 1 : 0);
+    json += String(((i + 1) == stableOuts) ? 1 : 0);
     if (i < 2) json += ",";
   }
-  json += "],\"run\":" + String(digitalRead(runPin) == LOW ? 1 : 0);
+  json += "],\"run\":" + String(stableRun);
   json += "}";
   
   server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -331,5 +356,43 @@ void loop() {
   } else {
     lastPress = millis();
   }
+  
+  // Debounced input sampling (2-sample stability check)
+  int sampleBalls   = readGroupCount(ballPins, 4);
+  int sampleStrikes = readGroupCount(strikePins, 3);
+  int sampleOuts    = readGroupCount(outPins, 3);
+  int sampleRun     = (digitalRead(runPin) == LOW) ? 1 : 0;
+  
+  if (lastSampleValid &&
+      sampleBalls   == lastSampleBalls &&
+      sampleStrikes == lastSampleStrikes &&
+      sampleOuts    == lastSampleOuts &&
+      sampleRun     == lastSampleRun) {
+    
+    if (stableBalls != sampleBalls) {
+      stableBalls = sampleBalls;
+      Serial.print("⚾ Balls: "); Serial.println(stableBalls);
+    }
+    if (stableStrikes != sampleStrikes) {
+      stableStrikes = sampleStrikes;
+      Serial.print("⚾ Strikes: "); Serial.println(stableStrikes);
+    }
+    if (stableOuts != sampleOuts) {
+      stableOuts = sampleOuts;
+      Serial.print("⚾ Outs: "); Serial.println(stableOuts);
+    }
+    if (stableRun != sampleRun) {
+      stableRun = sampleRun;
+      Serial.print("⚾ Run: "); Serial.println(stableRun);
+    }
+  }
+  
+  lastSampleBalls   = sampleBalls;
+  lastSampleStrikes = sampleStrikes;
+  lastSampleOuts    = sampleOuts;
+  lastSampleRun     = sampleRun;
+  lastSampleValid   = true;
+  
+  delay(10); // 10ms loop for fast response
 }
 

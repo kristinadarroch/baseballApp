@@ -10,6 +10,10 @@ import { DEFAULT_THEME, ScoreboardTheme } from '../constants/scoreboard-themes';
 const DEFAULT_ESP32_IP = '192.168.4.1';
 const ESP32_IP_STORAGE_KEY = '@esp32_ip_address';
 const SCOREBOARD_THEME_STORAGE_KEY = '@scoreboard_theme';
+const STATUS_POLL_INTERVAL_MS = 150;
+const STATUS_REQUEST_TIMEOUT_MS = 1500;
+const CONNECT_REQUEST_TIMEOUT_MS = 5000;
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 export interface GameState {
   balls: number[];
@@ -83,6 +87,7 @@ const ConnectionContext = createContext<ConnectionContextType | undefined>(undef
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [esp32IpAddress, setEsp32IpAddressState] = useState<string>(DEFAULT_ESP32_IP);
+  const esp32IpAddressRef = useRef<string>(DEFAULT_ESP32_IP);
   const [visitorTeamName, setVisitorTeamNameState] = useState<string>('VISITOR');
   const [homeTeamName, setHomeTeamNameState] = useState<string>('HOME');
   const [visitorRoster, setVisitorRosterState] = useState<Player[]>([]);
@@ -134,6 +139,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   
   // Flag to prevent concurrent fetches
   const isFetchingRef = useRef<boolean>(false);
+  const consecutiveFailureCountRef = useRef<number>(0);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isConnectedRef = useRef<boolean>(false);
   
   // Timers to debounce reset (prevent reset during rotary switch transitions)
   const ballResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,12 +151,21 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pollInterval, setPollInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
   // Game timer state
   const [gameElapsedTime, setGameElapsedTime] = useState<number>(0); // in seconds
   const gameStartTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const setConnectionStatus = (connected: boolean) => {
+    isConnectedRef.current = connected;
+    setIsConnected(connected);
+  };
+
+  const updateEsp32IpAddress = (ip: string) => {
+    esp32IpAddressRef.current = ip;
+    setEsp32IpAddressState(ip);
+  };
 
   // Load saved IP address on mount
   useEffect(() => {
@@ -161,7 +178,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       const savedIp = await AsyncStorage.getItem(ESP32_IP_STORAGE_KEY);
       if (savedIp) {
         console.log(`Loaded saved IP address: ${savedIp}`);
-        setEsp32IpAddressState(savedIp);
+        updateEsp32IpAddress(savedIp);
       } else {
         console.log(`Using default IP address: ${DEFAULT_ESP32_IP}`);
       }
@@ -187,7 +204,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const setEsp32IpAddress = async (ip: string) => {
     try {
       await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, ip);
-      setEsp32IpAddressState(ip);
+      updateEsp32IpAddress(ip);
       console.log(`Saved new IP address: ${ip}`);
       
       // If connected, disconnect and let user reconnect with new IP
@@ -233,21 +250,37 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const fetchGameState = async () => {
+  const fetchGameState = async (
+    requestTimeoutMs = STATUS_REQUEST_TIMEOUT_MS,
+    ipAddress = esp32IpAddressRef.current
+  ): Promise<boolean> => {
     // Prevent concurrent fetches
     if (isFetchingRef.current) {
-      return;
+      return false;
     }
     
     isFetchingRef.current = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let didTimeout = false;
+    const statusEndpoint = `http://${ipAddress}/status?t=${Date.now()}`;
     
     try {
-      const STATUS_ENDPOINT = `http://${esp32IpAddress}/status`;
-      const response = await fetch(STATUS_ENDPOINT, {
+      console.log(`Fetching ESP32 status: ${statusEndpoint}`);
+      const controller = new AbortController();
+      timeoutId = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+      }, requestTimeoutMs);
+
+      const response = await fetch(statusEndpoint, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
         },
+        cache: 'no-store',
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -367,20 +400,25 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
             const newCount = index + 1;
             console.log(`⚾ Out ${newCount} recorded`);
             setOuts(newCount);
-            
-            // Check if this is a NEW out (count increased from previous)
-            if (newCount > prevOutCountRef.current && fullGameState.gameStarted) {
-              console.log(`Out count increased: ${prevOutCountRef.current} → ${newCount}. Advancing batter.`);
-              prevOutCountRef.current = newCount; // Update BEFORE advancing to prevent duplicates
-              
-              // Advance batter immediately
+
+            // Check if this is a NEW out (count increased from previous) and advance batter
+            // Use functional update to access current gameStarted state (avoids stale closure)
+            if (newCount > prevOutCountRef.current) {
               setFullGameState(prevState => {
+                if (!prevState.gameStarted) {
+                  return prevState; // No change if game not started
+                }
+
+                console.log(`Out count increased: ${prevOutCountRef.current} → ${newCount}. Advancing batter.`);
+                prevOutCountRef.current = newCount; // Update BEFORE advancing to prevent duplicates
+
+                // Advance batter immediately
                 const isVisitor = prevState.currentBatterTeam === 'visitor';
                 const currentPos = isVisitor ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
                 const nextPos = (currentPos + 1) % 9;
-                
+
                 console.log(`   Batter #${currentPos + 1} → Batter #${nextPos + 1} (OUT)`);
-                
+
                 return isVisitor
                   ? { ...prevState, visitorBatterPosition: nextPos }
                   : { ...prevState, homeBatterPosition: nextPos };
@@ -411,76 +449,128 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         // State changed (either 0→1 or 1→0) - this is a real run!
         // Update ref IMMEDIATELY to prevent duplicate detections
         prevRunStateRef.current = currentRunState;
-        
-        // Increment run count
-        const newRunCount = runs + 1;
-        setRuns(newRunCount);
-        
+
         // Track run for current half-inning
         currentHalfInningRunsRef.current += 1;
         console.log(`⚾ Run scored! Half-inning runs: ${currentHalfInningRunsRef.current}`);
-        
-        // Check if run count increased and advance batter
-        if (newRunCount > prevRunCountRef.current && fullGameState.gameStarted) {
-          console.log(`   Run count increased: ${prevRunCountRef.current} → ${newRunCount}. Advancing batter.`);
-          prevRunCountRef.current = newRunCount; // Update BEFORE advancing to prevent duplicates
-          
-          // Add run to score AND advance batter
+
+        // Use functional update to avoid stale closure issues
+        setRuns(prevRuns => {
+          const newRunCount = prevRuns + 1;
+
+          // Check if run count increased and advance batter (using ref for gameStarted check)
           setFullGameState(prevState => {
-            const isVisitor = prevState.currentBatterTeam === 'visitor';
-            const currentPos = isVisitor ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
-            const nextPos = (currentPos + 1) % 9;
-            
-            console.log(`   Batter #${currentPos + 1} → Batter #${nextPos + 1} (RUN)`);
-            
+            if (!prevState.gameStarted) {
+              // Just add the run to score without advancing batter
+              return {
+                ...prevState,
+                visitorScore: prevState.currentBatterTeam === 'visitor'
+                  ? prevState.visitorScore + 1
+                  : prevState.visitorScore,
+                homeScore: prevState.currentBatterTeam === 'home'
+                  ? prevState.homeScore + 1
+                  : prevState.homeScore,
+              };
+            }
+
+            if (newRunCount > prevRunCountRef.current) {
+              console.log(`   Run count increased: ${prevRunCountRef.current} → ${newRunCount}. Advancing batter.`);
+              prevRunCountRef.current = newRunCount; // Update BEFORE advancing to prevent duplicates
+
+              // Add run to score AND advance batter
+              const isVisitor = prevState.currentBatterTeam === 'visitor';
+              const currentPos = isVisitor ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
+              const nextPos = (currentPos + 1) % 9;
+
+              console.log(`   Batter #${currentPos + 1} → Batter #${nextPos + 1} (RUN)`);
+
+              return {
+                ...prevState,
+                visitorScore: prevState.currentBatterTeam === 'visitor'
+                  ? prevState.visitorScore + 1
+                  : prevState.visitorScore,
+                homeScore: prevState.currentBatterTeam === 'home'
+                  ? prevState.homeScore + 1
+                  : prevState.homeScore,
+                visitorBatterPosition: isVisitor ? nextPos : prevState.visitorBatterPosition,
+                homeBatterPosition: isVisitor ? prevState.homeBatterPosition : nextPos,
+              };
+            }
+
+            // Just add the run to score without advancing batter
             return {
               ...prevState,
-              visitorScore: prevState.currentBatterTeam === 'visitor' 
-                ? prevState.visitorScore + 1 
+              visitorScore: prevState.currentBatterTeam === 'visitor'
+                ? prevState.visitorScore + 1
                 : prevState.visitorScore,
-              homeScore: prevState.currentBatterTeam === 'home' 
-                ? prevState.homeScore + 1 
+              homeScore: prevState.currentBatterTeam === 'home'
+                ? prevState.homeScore + 1
                 : prevState.homeScore,
-              visitorBatterPosition: isVisitor ? nextPos : prevState.visitorBatterPosition,
-              homeBatterPosition: isVisitor ? prevState.homeBatterPosition : nextPos,
             };
           });
-        } else {
-          // Just add the run to score without advancing batter
-          setFullGameState(prevState => ({
-            ...prevState,
-            visitorScore: prevState.currentBatterTeam === 'visitor' 
-              ? prevState.visitorScore + 1 
-              : prevState.visitorScore,
-            homeScore: prevState.currentBatterTeam === 'home' 
-              ? prevState.homeScore + 1 
-              : prevState.homeScore,
-          }));
-        }
+
+          return newRunCount;
+        });
       }
       
-      setIsConnected(true);
+      consecutiveFailureCountRef.current = 0;
+      setConnectionStatus(true);
       setError(null);
+      return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect');
-      setIsConnected(false);
+      const message = didTimeout
+        ? `Timeout after ${requestTimeoutMs}ms trying ${ipAddress}`
+        : err instanceof Error
+          ? err.message
+          : 'Failed to connect';
+
+      console.error(`ESP32 status request failed: ${message}`);
+      consecutiveFailureCountRef.current += 1;
+      setError(message);
+
+      if (!isConnectedRef.current || consecutiveFailureCountRef.current >= MAX_CONSECUTIVE_FAILURES) {
+        setConnectionStatus(false);
+      }
+      return false;
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       // Always release the fetching flag
       isFetchingRef.current = false;
     }
   };
 
   const connect = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
+    consecutiveFailureCountRef.current = 0;
     setIsLoading(true);
-    // Initial fetch
-    fetchGameState().finally(() => setIsLoading(false));
+    // Initial fetch. If a stale station-mode IP was saved, fall back to the
+    // production clicker AP address.
+    const initialIpAddress = esp32IpAddressRef.current;
+    fetchGameState(CONNECT_REQUEST_TIMEOUT_MS, initialIpAddress)
+      .then(async connected => {
+        if (!connected && initialIpAddress !== DEFAULT_ESP32_IP) {
+          console.log(`Retrying ESP32 connection with default IP: ${DEFAULT_ESP32_IP}`);
+          const defaultConnected = await fetchGameState(CONNECT_REQUEST_TIMEOUT_MS, DEFAULT_ESP32_IP);
+          if (defaultConnected) {
+            await AsyncStorage.setItem(ESP32_IP_STORAGE_KEY, DEFAULT_ESP32_IP);
+            updateEsp32IpAddress(DEFAULT_ESP32_IP);
+          }
+        }
+      })
+      .finally(() => setIsLoading(false));
     
-    // Set up polling every 500ms
+    // Set up fast polling for near-real-time updates from the ESP32.
     const interval = setInterval(() => {
       fetchGameState();
-    }, 500);
+    }, STATUS_POLL_INTERVAL_MS);
     
-    setPollInterval(interval);
+    pollIntervalRef.current = interval;
   };
 
   // SIMPLIFIED: Advance inning when umpire resets from 3 outs to 0
@@ -672,8 +762,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setPrevBallState([0, 0, 0, 0]);
     setPrevStrikeState([0, 0, 0]);
     setPrevOutState([0, 0, 0]);
-    prevRunStateRef.current = 0;
-    runButtonInitializedRef.current = false;  // Reset run button initialization
+    prevRunStateRef.current = gameState?.run ?? prevRunStateRef.current;
+    runButtonInitializedRef.current = true;  // Begin from the latest connected reading.
     currentHalfInningRunsRef.current = 0;  // Reset half-inning runs
     prevOutCountRef.current = 0;  // Reset out count tracking
     prevRunCountRef.current = 0;  // Reset run count tracking
@@ -735,9 +825,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   };
 
   const disconnect = () => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      setPollInterval(null);
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
     
     // Clear any pending reset timers
@@ -754,7 +844,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       outResetTimerRef.current = null;
     }
     
-    setIsConnected(false);
+    consecutiveFailureCountRef.current = 0;
+    setConnectionStatus(false);
     setGameState(null);
     // Reset counts and previous states
     setBalls(0);
@@ -765,13 +856,14 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setPrevStrikeState([0, 0, 0]);
     setPrevOutState([0, 0, 0]);
     prevRunStateRef.current = 0;
+    runButtonInitializedRef.current = false;
   };
 
   useEffect(() => {
     // Cleanup on unmount
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
       }
       // Clear any pending reset timers
       if (ballResetTimerRef.current) {
@@ -788,7 +880,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         clearInterval(timerIntervalRef.current);
       }
     };
-  }, [pollInterval]);
+  }, []);
 
   return (
     <ConnectionContext.Provider
@@ -834,4 +926,3 @@ export function useConnection() {
   }
   return context;
 }
-

@@ -1,16 +1,19 @@
 /*
  * ESP32 Baseball Clicker - Optimized Version
- * 
+ *
  * Features:
  * - Immediate response (<50ms) - no 0.5s delay
  * - Derived count from pin readings (highest pin HIGH = count)
  * - Contiguous lighting rule (count=2 means lights 1,2 are ON)
  * - Robust debouncing (10ms loop with 2-sample stability check)
  * - No dependence on previous state for correctness
- * 
- * Hardware:
- * - Mechanical roller with contacts on digital pins
- * - Each position lights up corresponding pin (1-4 for balls, etc.)
+ *
+ * Hardware Pin Assignments:
+ * - Strike Wheel: 0=GND, 1=GPIO5, 2=GPIO4 (Strike 3 not displayed)
+ * - Ball Wheel: 0=GND, 1=GPIO6, 2=GPIO21, 3=GPIO7 (Ball 4 not displayed)
+ * - Out Wheel: 0=GND, 1=GPIO2, 2=GPIO3
+ * - Run Button: GPIO20
+ * - Inning: Removed (determined by outs in the app)
  */
 
 #include <WiFi.h>
@@ -21,10 +24,10 @@ const char* apSSID = "BaseballClicker";
 const char* apPassword = "playball123";
 
 // Pin assignments for roller inputs
-const int BALL_PINS[]   = {20, 8, 9, 10};  // Ball 1-4
-const int STRIKE_PINS[] = {5, 6, 7};       // Strike 1-3
-const int OUT_PINS[]    = {2, 3, 4};       // Out 1-3
-const int RUN_PIN       = 21;              // Run button
+const int BALL_PINS[]   = {6, 21, 7};      // Ball 1-3 (GPIO6, GPIO21, GPIO7)
+const int STRIKE_PINS[] = {5, 4};          // Strike 1-2 (GPIO5, GPIO4)
+const int OUT_PINS[]    = {2, 3};          // Out 1-2 (GPIO2, GPIO3)
+const int RUN_PIN       = 20;              // Run button (GPIO20)
 
 // Stable counts (what we display/report)
 int stableBalls   = 0;
@@ -70,19 +73,20 @@ int readButton(int pin) {
  */
 void setup() {
   Serial.begin(115200);
+  delay(1000);
   
   // Configure ball pins
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 3; i++) {
     pinMode(BALL_PINS[i], INPUT_PULLUP);
   }
-  
+
   // Configure strike pins
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     pinMode(STRIKE_PINS[i], INPUT_PULLUP);
   }
-  
+
   // Configure out pins
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     pinMode(OUT_PINS[i], INPUT_PULLUP);
   }
   
@@ -90,8 +94,11 @@ void setup() {
   pinMode(RUN_PIN, INPUT_PULLUP);
   
   // Start WiFi Access Point
-  WiFi.softAP(apSSID, apPassword);
+  WiFi.mode(WIFI_AP);
+  bool apStarted = WiFi.softAP(apSSID, apPassword, 6, 0, 4);
   IPAddress myIP = WiFi.softAPIP();
+  Serial.print("Access Point started: ");
+  Serial.println(apStarted ? "YES" : "NO");
   Serial.print("Access Point IP address: ");
   Serial.println(myIP);
   
@@ -113,9 +120,9 @@ void loop() {
   server.handleClient();
   
   // Sample all inputs
-  int sampleBalls   = readGroupCount(BALL_PINS, 4);
-  int sampleStrikes = readGroupCount(STRIKE_PINS, 3);
-  int sampleOuts    = readGroupCount(OUT_PINS, 3);
+  int sampleBalls   = readGroupCount(BALL_PINS, 3);
+  int sampleStrikes = readGroupCount(STRIKE_PINS, 2);
+  int sampleOuts    = readGroupCount(OUT_PINS, 2);
   int sampleRun     = readButton(RUN_PIN);
   
   // Check if samples match previous reading (stability check)
@@ -200,28 +207,28 @@ void handleRoot() {
   html += "<h2>Balls</h2>";
   html += "<div class='count'>" + String(stableBalls) + "</div>";
   html += "<div class='indicators'>";
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 3; i++) {
     // Show position-based (only active position lit)
     html += "<div class='indicator " + String(((i + 1) == stableBalls) ? "on" : "off") + "'></div>";
   }
   html += "</div></div>";
-  
+
   // Strikes
   html += "<div class='section'>";
   html += "<h2>Strikes</h2>";
   html += "<div class='count'>" + String(stableStrikes) + "</div>";
   html += "<div class='indicators'>";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     html += "<div class='indicator " + String(((i + 1) == stableStrikes) ? "on" : "off") + "'></div>";
   }
   html += "</div></div>";
-  
+
   // Outs
   html += "<div class='section'>";
   html += "<h2>Outs</h2>";
   html += "<div class='count'>" + String(stableOuts) + "</div>";
   html += "<div class='indicators'>";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     html += "<div class='indicator " + String(((i + 1) == stableOuts) ? "on" : "off") + "'></div>";
   }
   html += "</div></div>";
@@ -247,28 +254,28 @@ void handleStatus() {
   // The app uses rising-edge detection, so only the active position should be 1
   String json = "{";
   
-  // Balls array (position-based: count=2 means [0,1,0,0])
+  // Balls array (position-based: count=2 means [0,1,0])
   json += "\"balls\":[";
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 3; i++) {
     // Only the position matching the count is 1, others are 0
     json += String(((i + 1) == stableBalls) ? 1 : 0);
-    if (i < 3) json += ",";
+    if (i < 2) json += ",";
   }
   json += "],";
-  
-  // Strikes array (position-based: count=2 means [0,1,0])
+
+  // Strikes array (position-based: count=2 means [0,1])
   json += "\"strikes\":[";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     json += String(((i + 1) == stableStrikes) ? 1 : 0);
-    if (i < 2) json += ",";
+    if (i < 1) json += ",";
   }
   json += "],";
-  
-  // Outs array (position-based: count=2 means [0,1,0])
+
+  // Outs array (position-based: count=2 means [0,1])
   json += "\"outs\":[";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     json += String(((i + 1) == stableOuts) ? 1 : 0);
-    if (i < 2) json += ",";
+    if (i < 1) json += ",";
   }
   json += "],";
   
@@ -277,7 +284,9 @@ void handleStatus() {
   
   json += "}";
   
+  server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
   server.send(200, "application/json", json);
   Serial.println("Status sent: " + json);
 }
-

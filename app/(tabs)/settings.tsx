@@ -310,7 +310,7 @@ export default function SettingsScreen() {
           <View style={styles.modeCard}>
             <Text style={styles.modeTitle}>🏟️ Access Point Mode (Default)</Text>
             <Text style={styles.modeText}>
-              • ESP32 creates "BaseballClicker" WiFi{'\n'}
+              • ESP32 creates {'"'}BaseballClicker{'"'} WiFi{'\n'}
               • IP Address: 192.168.4.1{'\n'}
               • Best for: Production, field use{'\n'}
               • Internet: Not available
@@ -336,14 +336,14 @@ export default function SettingsScreen() {
           <Text style={styles.guideTitle}>For Production (Access Point):</Text>
           <Text style={styles.guideText}>
             1. Keep default IP: 192.168.4.1{'\n'}
-            2. Connect to "BaseballClicker" WiFi{'\n'}
+            2. Connect to {'"'}BaseballClicker{'"'} WiFi{'\n'}
             3. Tap Connect in app
           </Text>
 
           <Text style={styles.guideTitle}>For Development (Station Mode):</Text>
           <Text style={styles.guideText}>
             1. Upload Station Mode code to ESP32{'\n'}
-            2. Check Serial Monitor for ESP32's IP{'\n'}
+            2. Check Serial Monitor for ESP32{"'"}s IP{'\n'}
             3. Enter that IP here and save{'\n'}
             4. Stay on your regular WiFi{'\n'}
             5. Tap Connect in app
@@ -553,4 +553,3 @@ const styles = StyleSheet.create({
     fontFamily: 'Courier',
   },
 });
-

@@ -4,6 +4,8 @@ import { ConnectionProvider, GameState, useConnection } from '../ConnectionConte
 
 // Mock fetch
 const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+const TEST_POLL_INTERVAL_MS = 150;
+const TEST_RESET_DEBOUNCE_MS = 500;
 
 describe('ConnectionContext', () => {
   beforeEach(() => {
@@ -36,23 +38,38 @@ describe('ConnectionContext', () => {
   });
 
   describe('Run Counter', () => {
-    it('should increment runs on button toggle to high (0→1)', async () => {
-      const mockData: GameState = {
-        balls: [0, 0, 0, 0],
-        strikes: [0, 0, 0],
-        outs: [0, 0, 0],
-        run: 1, // Run button toggled high
-      };
-
-      mockFetch.mockResolvedValue({
+    it('should increment runs on button toggle to high (0→1) after initial baseline', async () => {
+      mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockData,
+        json: async () => ({
+          balls: [0, 0, 0, 0],
+          strikes: [0, 0, 0],
+          outs: [0, 0, 0],
+          run: 0,
+        }),
+      } as Response);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          balls: [0, 0, 0, 0],
+          strikes: [0, 0, 0],
+          outs: [0, 0, 0],
+          run: 1,
+        }),
       } as Response);
 
       const { result } = renderHook(() => useConnection(), { wrapper });
 
       act(() => {
         result.current.connect();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isConnected).toBe(true);
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
       });
 
       await waitFor(() => {
@@ -63,14 +80,14 @@ describe('ConnectionContext', () => {
     it('should increment runs on each button toggle (both high and low)', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper });
 
-      // First toggle - 0→1 (high)
+      // Initial baseline - do not count the state that existed before connecting.
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           balls: [0, 0, 0, 0],
           strikes: [0, 0, 0],
           outs: [0, 0, 0],
-          run: 1,
+          run: 0,
         }),
       } as Response);
 
@@ -79,71 +96,55 @@ describe('ConnectionContext', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.runs).toBe(1);
+        expect(result.current.isConnected).toBe(true);
       });
 
-      // Second toggle - 1→0 (low) = another run!
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
-          run: 0,
-        }),
-      } as Response);
+      const toggles = [1, 0, 1, 0];
 
-      act(() => {
-        jest.advanceTimersByTime(500);
-      });
+      for (const [index, run] of toggles.entries()) {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            balls: [0, 0, 0, 0],
+            strikes: [0, 0, 0],
+            outs: [0, 0, 0],
+            run,
+          }),
+        } as Response);
 
-      await waitFor(() => {
-        expect(result.current.runs).toBe(2); // Incremented on toggle low
-      });
+        act(() => {
+          jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
+        });
 
-      // Third toggle - 0→1 (high) = another run!
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
-          run: 1,
-        }),
-      } as Response);
-
-      act(() => {
-        jest.advanceTimersByTime(500);
-      });
-
-      await waitFor(() => {
-        expect(result.current.runs).toBe(3); // Incremented on toggle high
-      });
-
-      // Fourth toggle - 1→0 (low) = another run!
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
-          run: 0,
-        }),
-      } as Response);
-
-      act(() => {
-        jest.advanceTimersByTime(500);
-      });
-
-      await waitFor(() => {
-        expect(result.current.runs).toBe(4); // Incremented on toggle low
-      });
+        await waitFor(() => {
+          expect(result.current.runs).toBe(index + 1);
+        });
+      }
     });
 
     it('should not increment when state stays the same (latch held)', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper });
 
-      // First toggle to high
+      // Initial baseline
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          balls: [0, 0, 0, 0],
+          strikes: [0, 0, 0],
+          outs: [0, 0, 0],
+          run: 0,
+        }),
+      } as Response);
+
+      act(() => {
+        result.current.connect();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isConnected).toBe(true);
+      });
+
+      // Toggle to high
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -155,7 +156,7 @@ describe('ConnectionContext', () => {
       } as Response);
 
       act(() => {
-        result.current.connect();
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
       });
 
       await waitFor(() => {
@@ -174,7 +175,7 @@ describe('ConnectionContext', () => {
       } as Response);
 
       act(() => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
       });
 
       await waitFor(() => {
@@ -185,8 +186,26 @@ describe('ConnectionContext', () => {
     it('should reset runs on disconnect', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper });
 
-      // Press run button multiple times
-      mockFetch.mockResolvedValue({
+      // Initial baseline
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          balls: [0, 0, 0, 0],
+          strikes: [0, 0, 0],
+          outs: [0, 0, 0],
+          run: 0,
+        }),
+      } as Response);
+
+      act(() => {
+        result.current.connect();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isConnected).toBe(true);
+      });
+
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           balls: [0, 0, 0, 0],
@@ -197,7 +216,7 @@ describe('ConnectionContext', () => {
       } as Response);
 
       act(() => {
-        result.current.connect();
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
       });
 
       await waitFor(() => {
@@ -254,6 +273,72 @@ describe('ConnectionContext', () => {
       });
 
       expect(result.current.isConnected).toBe(false);
+    });
+
+    it('should stay connected through a transient poll failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          balls: [0, 0, 0, 0],
+          strikes: [0, 0, 0],
+          outs: [0, 0, 0],
+          run: 0,
+        }),
+      } as Response);
+
+      const { result } = renderHook(() => useConnection(), { wrapper });
+
+      act(() => {
+        result.current.connect();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isConnected).toBe(true);
+      });
+
+      mockFetch.mockRejectedValueOnce(new Error('Network hiccup'));
+
+      act(() => {
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
+      });
+
+      await waitFor(() => {
+        expect(result.current.error).toBe('Network hiccup');
+      });
+
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    it('should fall back to the default AP IP when a saved IP fails', async () => {
+      mockFetch
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            balls: [0, 0, 0, 0],
+            strikes: [0, 0, 0],
+            outs: [0, 0, 0],
+            run: 0,
+          }),
+        } as Response);
+
+      const { result } = renderHook(() => useConnection(), { wrapper });
+
+      await act(async () => {
+        await result.current.setEsp32IpAddress('192.168.0.99');
+      });
+
+      act(() => {
+        result.current.connect();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isConnected).toBe(true);
+      });
+
+      expect(mockFetch.mock.calls[0][0]).toContain('http://192.168.0.99/status');
+      expect(mockFetch.mock.calls[1][0]).toContain('http://192.168.4.1/status');
+      expect(result.current.esp32IpAddress).toBe('192.168.4.1');
     });
   });
 
@@ -382,7 +467,7 @@ describe('ConnectionContext', () => {
 
       // Trigger another poll
       act(() => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS + TEST_RESET_DEBOUNCE_MS);
       });
 
       await waitFor(() => {
@@ -426,7 +511,7 @@ describe('ConnectionContext', () => {
       } as Response);
 
       act(() => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS + TEST_RESET_DEBOUNCE_MS);
       });
 
       await waitFor(() => {
@@ -470,7 +555,7 @@ describe('ConnectionContext', () => {
       } as Response);
 
       act(() => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
       });
 
       await waitFor(() => {
@@ -515,7 +600,7 @@ describe('ConnectionContext', () => {
       } as Response);
 
       act(() => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS + TEST_RESET_DEBOUNCE_MS);
       });
 
       await waitFor(() => {
@@ -564,7 +649,7 @@ describe('ConnectionContext', () => {
   });
 
   describe('Polling', () => {
-    it('should poll every 500ms when connected', async () => {
+    it('should poll every 150ms when connected', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -587,7 +672,7 @@ describe('ConnectionContext', () => {
 
       // Advance time and check polling
       act(() => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
       });
 
       await waitFor(() => {
@@ -595,7 +680,7 @@ describe('ConnectionContext', () => {
       });
 
       act(() => {
-        jest.advanceTimersByTime(500);
+        jest.advanceTimersByTime(TEST_POLL_INTERVAL_MS);
       });
 
       await waitFor(() => {
@@ -640,4 +725,3 @@ describe('ConnectionContext', () => {
     });
   });
 });
-

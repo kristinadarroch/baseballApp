@@ -329,6 +329,9 @@ void handleStatus() {
   json += "],\"run\":" + String(stableRun);
   json += "}";
   
+  server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "0");
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -395,4 +398,3 @@ void loop() {
   
   delay(10); // 10ms loop for fast response
 }
-

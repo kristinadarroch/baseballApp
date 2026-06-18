@@ -74,6 +74,7 @@ export default function ConnectScreen() {
             <Text style={styles.errorText}>⚠ CONNECTION FAILED</Text>
             <Text style={styles.errorHint}>Check WiFi: BaseballClicker</Text>
             <Text style={styles.errorDetail}>Tried: {esp32IpAddress}</Text>
+            <Text style={styles.errorDetail}>{error}</Text>
           </View>
         )}
       </View>
@@ -191,4 +192,3 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 });
-

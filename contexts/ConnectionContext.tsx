@@ -14,6 +14,7 @@ const STATUS_POLL_INTERVAL_MS = 150;
 const STATUS_REQUEST_TIMEOUT_MS = 1500;
 const CONNECT_REQUEST_TIMEOUT_MS = 5000;
 const MAX_CONSECUTIVE_FAILURES = 3;
+const OUTS_PER_HALF_INNING = 3;
 
 export interface GameState {
   balls: number[];
@@ -120,9 +121,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [atBatLog, setAtBatLog] = useState<AtBatLog[]>([]);
 
   // Track previous button states to detect press events (rising edge 0->1)
-  const [prevBallState, setPrevBallState] = useState<number[]>([0, 0, 0, 0]);
-  const [prevStrikeState, setPrevStrikeState] = useState<number[]>([0, 0, 0]);
-  const [prevOutState, setPrevOutState] = useState<number[]>([0, 0, 0]);
+  const prevBallStateRef = useRef<number[]>([0, 0, 0, 0]);
+  const prevStrikeStateRef = useRef<number[]>([0, 0, 0]);
+  const prevOutStateRef = useRef<number[]>([0, 0, 0]);
   
   // Use ref for run state to avoid async state update issues
   const prevRunStateRef = useRef<number>(0);
@@ -160,6 +161,27 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const setConnectionStatus = (connected: boolean) => {
     isConnectedRef.current = connected;
     setIsConnected(connected);
+  };
+
+  const advanceBatterForOut = (outCount: number) => {
+    setFullGameState(prevState => {
+      if (!prevState.gameStarted) {
+        return prevState;
+      }
+
+      console.log(`Out count increased: ${prevOutCountRef.current} → ${outCount}. Advancing batter.`);
+      prevOutCountRef.current = outCount;
+
+      const isVisitor = prevState.currentBatterTeam === 'visitor';
+      const currentPos = isVisitor ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
+      const nextPos = (currentPos + 1) % 9;
+
+      console.log(`   Batter #${currentPos + 1} → Batter #${nextPos + 1} (OUT)`);
+
+      return isVisitor
+        ? { ...prevState, visitorBatterPosition: nextPos }
+        : { ...prevState, homeBatterPosition: nextPos };
+    });
   };
 
   const updateEsp32IpAddress = (ip: string) => {
@@ -319,7 +341,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         
         // Check for button presses
         data.balls.forEach((current, index) => {
-          if (current === 1 && prevBallState[index] === 0) {
+          if (current === 1 && prevBallStateRef.current[index] === 0) {
             // Button pressed (rising edge detected)
             const newCount = index + 1; // Button 0 = 1 ball, Button 1 = 2 balls, etc.
             console.log(`Ball button ${index + 1} pressed, setting count to ${newCount}`);
@@ -327,7 +349,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
           }
         });
       }
-      setPrevBallState(data.balls);
+      prevBallStateRef.current = data.balls;
       
       // Check strikes for button press or reset (with debounce for rotary switches)
       const allStrikesZero = data.strikes.every(s => s === 0);
@@ -353,29 +375,37 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         }
         
         data.strikes.forEach((current, index) => {
-          if (current === 1 && prevStrikeState[index] === 0) {
+          if (current === 1 && prevStrikeStateRef.current[index] === 0) {
             const newCount = index + 1;
             console.log(`Strike button ${index + 1} pressed, setting count to ${newCount}`);
             setStrikes(newCount);
           }
         });
       }
-      setPrevStrikeState(data.strikes);
+      prevStrikeStateRef.current = data.strikes;
       
       // Check outs for button press or reset (SIMPLIFIED)
       const allOutsZero = data.outs.every(o => o === 0);
       if (allOutsZero) {
+        const displayedOutPositions = data.outs.length;
         // All switches off - debounce before resetting
         if (!outResetTimerRef.current) {
           outResetTimerRef.current = setTimeout(() => {
             setOuts(prev => {
-              const wasThreeOuts = prev === 3;
+              const wasDisplayedThirdOut = prev === OUTS_PER_HALF_INNING;
+              const wasHiddenThirdOut =
+                displayedOutPositions < OUTS_PER_HALF_INNING &&
+                prev === displayedOutPositions;
+              const shouldAdvanceHalfInning = wasDisplayedThirdOut || wasHiddenThirdOut;
+
               if (prev !== 0) {
                 console.log(`Outs resetting from ${prev} to 0`);
                 
-                // SIMPLE RULE: If outs was 3, now going to 0 → change inning
-                if (wasThreeOuts) {
-                  console.log(`⚾⚾⚾ INNING CHANGE: Outs went 3→0 ⚾⚾⚾`);
+                if (shouldAdvanceHalfInning) {
+                  console.log(`⚾⚾⚾ INNING CHANGE: Final out reset to 0 ⚾⚾⚾`);
+                  if (wasHiddenThirdOut && OUTS_PER_HALF_INNING > prevOutCountRef.current) {
+                    advanceBatterForOut(OUTS_PER_HALF_INNING);
+                  }
                   // Advance inning after state update completes
                   setTimeout(() => advanceInning(), 50);
                 }
@@ -396,38 +426,19 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         
         // Check for button presses - record the out count and advance batter if increased
         data.outs.forEach((current, index) => {
-          if (current === 1 && prevOutState[index] === 0) {
+          if (current === 1 && prevOutStateRef.current[index] === 0) {
             const newCount = index + 1;
             console.log(`⚾ Out ${newCount} recorded`);
             setOuts(newCount);
 
             // Check if this is a NEW out (count increased from previous) and advance batter
-            // Use functional update to access current gameStarted state (avoids stale closure)
             if (newCount > prevOutCountRef.current) {
-              setFullGameState(prevState => {
-                if (!prevState.gameStarted) {
-                  return prevState; // No change if game not started
-                }
-
-                console.log(`Out count increased: ${prevOutCountRef.current} → ${newCount}. Advancing batter.`);
-                prevOutCountRef.current = newCount; // Update BEFORE advancing to prevent duplicates
-
-                // Advance batter immediately
-                const isVisitor = prevState.currentBatterTeam === 'visitor';
-                const currentPos = isVisitor ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
-                const nextPos = (currentPos + 1) % 9;
-
-                console.log(`   Batter #${currentPos + 1} → Batter #${nextPos + 1} (OUT)`);
-
-                return isVisitor
-                  ? { ...prevState, visitorBatterPosition: nextPos }
-                  : { ...prevState, homeBatterPosition: nextPos };
-              });
+              advanceBatterForOut(newCount);
             }
           }
         });
       }
-      setPrevOutState(data.outs);
+      prevOutStateRef.current = data.outs;
       
       // Check run button for toggle (latch)
       // Run button toggles: high→low OR low→high both count as 1 run
@@ -573,12 +584,16 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     pollIntervalRef.current = interval;
   };
 
-  // SIMPLIFIED: Advance inning when umpire resets from 3 outs to 0
+  // Advance inning when the final out resets the clicker display to 0.
   const advanceInning = () => {
     const runsThisHalfInning = currentHalfInningRunsRef.current;
     
     setFullGameState(prevState => {
-      const inningOutCount = prevState.currentInningOuts + 3; // Add the 3 outs we just completed
+      if (!prevState.gameStarted) {
+        return prevState;
+      }
+
+      const inningOutCount = prevState.currentInningOuts + OUTS_PER_HALF_INNING;
       
       // Top half complete (visitor done batting)
       if (prevState.isTopOfInning) {
@@ -594,7 +609,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         // Switch to bottom of inning (home team bats)
         return {
           ...prevState,
-          totalOuts: prevState.totalOuts + 3,
+          totalOuts: prevState.totalOuts + OUTS_PER_HALF_INNING,
           currentInningOuts: inningOutCount,
           isTopOfInning: false,
           currentBatterTeam: 'home',
@@ -615,7 +630,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
         // Move to next inning (visitor bats)
         return {
           ...prevState,
-          totalOuts: prevState.totalOuts + 3,
+          totalOuts: prevState.totalOuts + OUTS_PER_HALF_INNING,
           currentInningOuts: 0, // Reset for new inning
           inning: prevState.inning + 1,
           isTopOfInning: true,
@@ -759,9 +774,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setStrikes(0);
     setOuts(0);
     setRuns(0);
-    setPrevBallState([0, 0, 0, 0]);
-    setPrevStrikeState([0, 0, 0]);
-    setPrevOutState([0, 0, 0]);
+    prevBallStateRef.current = [0, 0, 0, 0];
+    prevStrikeStateRef.current = [0, 0, 0];
+    prevOutStateRef.current = [0, 0, 0];
     prevRunStateRef.current = gameState?.run ?? prevRunStateRef.current;
     runButtonInitializedRef.current = true;  // Begin from the latest connected reading.
     currentHalfInningRunsRef.current = 0;  // Reset half-inning runs
@@ -852,9 +867,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setStrikes(0);
     setOuts(0);
     setRuns(0);
-    setPrevBallState([0, 0, 0, 0]);
-    setPrevStrikeState([0, 0, 0]);
-    setPrevOutState([0, 0, 0]);
+    prevBallStateRef.current = [0, 0, 0, 0];
+    prevStrikeStateRef.current = [0, 0, 0];
+    prevOutStateRef.current = [0, 0, 0];
     prevRunStateRef.current = 0;
     runButtonInitializedRef.current = false;
   };

@@ -24,10 +24,10 @@ const char* apSSID = "BaseballClicker";
 const char* apPassword = "playball123";
 
 // Pin assignments for roller inputs
-const int BALL_PINS[]   = {6, 21, 7};      // Ball 1-3 (GPIO6, GPIO21, GPIO7)
-const int STRIKE_PINS[] = {5, 4};          // Strike 1-2 (GPIO5, GPIO4)
-const int OUT_PINS[]    = {2, 3};          // Out 1-2 (GPIO2, GPIO3)
-const int RUN_PIN       = 20;              // Run button (GPIO20)
+const int BALL_PINS[]   = {5, 7, 6};      // Ball 1-3 (GPIO6, GPIO21, GPIO7)
+const int STRIKE_PINS[] = {4, 3};          // Strike 1-2 (GPIO5, GPIO4)
+const int OUT_PINS[]    = {1, 2};          // Out 1-2 (GPIO2, GPIO3)
+const int RUN_PIN       = 8;              // Run button (GPIO20)
 
 // Stable counts (what we display/report)
 int stableBalls   = 0;

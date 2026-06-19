@@ -11,8 +11,8 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
   <ConnectionProvider>{children}</ConnectionProvider>
 );
 
-const positionArray = (count: number, slots: number) =>
-  Array.from({ length: slots }, (_, index) => (count === index + 1 ? 1 : 0));
+const latchedArray = (count: number, slots: number) =>
+  Array.from({ length: slots }, (_, index) => (index < count ? 1 : 0));
 
 const clickerState = ({
   balls = 0,
@@ -25,9 +25,9 @@ const clickerState = ({
   outs?: number;
   run?: number;
 } = {}): GameState => ({
-  balls: positionArray(balls, 3),
-  strikes: positionArray(strikes, 2),
-  outs: positionArray(outs, 2),
+  balls: latchedArray(balls, 3),
+  strikes: latchedArray(strikes, 2),
+  outs: latchedArray(outs, 2),
   run,
 });
 

@@ -12,7 +12,8 @@
  * - Strike Wheel: 0=PIN 13/GND, 1=PIN 4/D3, 2=PIN 3/D2 (Strike 3 not displayed)
  * - Ball Wheel: 0=PIN 13/GND, 1=PIN 5/D4, 2=PIN 7/D6, 3=PIN 6/D5 (Ball 4 not displayed)
  * - Out Wheel: 0=PIN 13/GND, 1=PIN 1/D0, 2=PIN 2/D1
- * - Run Button: PIN 8/D7
+ * - Run Button: D8
+ * - Sleep Switch: D7 (reserved for future sleep mode)
  * - Inning: Removed (determined by outs in the app)
  */
 
@@ -27,7 +28,8 @@ const char* apPassword = "playball123";
 const int BALL_PINS[]   = {D4, D6, D5};    // Ball 1=PIN 5/D4, 2=PIN 7/D6, 3=PIN 6/D5
 const int STRIKE_PINS[] = {D3, D2};        // Strike 1=PIN 4/D3, 2=PIN 3/D2
 const int OUT_PINS[]    = {D0, D1};        // Out 1=PIN 1/D0, 2=PIN 2/D1
-const int RUN_PIN       = D7;              // Run button=PIN 8/D7
+const int RUN_PIN          = D8;           // Run button=D8
+const int SLEEP_SWITCH_PIN = D7;           // Sleep switch=D7 (reserved; not implemented yet)
 
 // Stable counts (what we display/report)
 int stableBalls   = 0;
@@ -54,7 +56,8 @@ void printPinMap() {
   Serial.printf("  Strike 2 PIN 3/D2 -> GPIO %d\n", STRIKE_PINS[1]);
   Serial.printf("  Out 1 PIN 1/D0 -> GPIO %d\n", OUT_PINS[0]);
   Serial.printf("  Out 2 PIN 2/D1 -> GPIO %d\n", OUT_PINS[1]);
-  Serial.printf("  Run PIN 8/D7 -> GPIO %d\n", RUN_PIN);
+  Serial.printf("  Run D8 -> GPIO %d\n", RUN_PIN);
+  Serial.printf("  Sleep switch D7 -> GPIO %d (reserved)\n", SLEEP_SWITCH_PIN);
 }
 
 /**
@@ -102,7 +105,8 @@ void setup() {
     pinMode(OUT_PINS[i], INPUT_PULLUP);
   }
   
-  // Configure run button
+  // Configure run button. D7 is reserved for the future sleep switch and is
+  // intentionally not read until sleep mode is implemented.
   pinMode(RUN_PIN, INPUT_PULLUP);
   
   // Start WiFi Access Point
@@ -221,8 +225,7 @@ void handleRoot() {
   html += "<div class='count'>" + String(stableBalls) + "</div>";
   html += "<div class='indicators'>";
   for (int i = 0; i < 3; i++) {
-    // Show position-based (only active position lit)
-    html += "<div class='indicator " + String(((i + 1) == stableBalls) ? "on" : "off") + "'></div>";
+    html += "<div class='indicator " + String((i < stableBalls) ? "on" : "off") + "'></div>";
   }
   html += "</div></div>";
 
@@ -232,7 +235,7 @@ void handleRoot() {
   html += "<div class='count'>" + String(stableStrikes) + "</div>";
   html += "<div class='indicators'>";
   for (int i = 0; i < 2; i++) {
-    html += "<div class='indicator " + String(((i + 1) == stableStrikes) ? "on" : "off") + "'></div>";
+    html += "<div class='indicator " + String((i < stableStrikes) ? "on" : "off") + "'></div>";
   }
   html += "</div></div>";
 
@@ -242,7 +245,7 @@ void handleRoot() {
   html += "<div class='count'>" + String(stableOuts) + "</div>";
   html += "<div class='indicators'>";
   for (int i = 0; i < 2; i++) {
-    html += "<div class='indicator " + String(((i + 1) == stableOuts) ? "on" : "off") + "'></div>";
+    html += "<div class='indicator " + String((i < stableOuts) ? "on" : "off") + "'></div>";
   }
   html += "</div></div>";
   
@@ -259,35 +262,34 @@ void handleRoot() {
 
 /**
  * JSON status endpoint for React Native app
- * Returns position-based arrays (only highest position is 1)
- * Example: count=2 returns [0,1,0,0] not [1,1,0,0]
+ * Returns latched scoreboard arrays.
+ * Example: count=2 returns [1,1,0].
  */
 void handleStatus() {
-  // Build JSON with position-based arrays for app compatibility
-  // The app uses rising-edge detection, so only the active position should be 1
+  // Build JSON from the latched wheel state: count=2 means the first two
+  // scoreboard lamps are active.
   String json = "{";
   
-  // Balls array (position-based: count=2 means [0,1,0])
+  // Balls array (count=2 means [1,1,0])
   json += "\"balls\":[";
   for (int i = 0; i < 3; i++) {
-    // Only the position matching the count is 1, others are 0
-    json += String(((i + 1) == stableBalls) ? 1 : 0);
+    json += String((i < stableBalls) ? 1 : 0);
     if (i < 2) json += ",";
   }
   json += "],";
 
-  // Strikes array (position-based: count=2 means [0,1])
+  // Strikes array (count=2 means [1,1])
   json += "\"strikes\":[";
   for (int i = 0; i < 2; i++) {
-    json += String(((i + 1) == stableStrikes) ? 1 : 0);
+    json += String((i < stableStrikes) ? 1 : 0);
     if (i < 1) json += ",";
   }
   json += "],";
 
-  // Outs array (position-based: count=2 means [0,1])
+  // Outs array (count=2 means [1,1])
   json += "\"outs\":[";
   for (int i = 0; i < 2; i++) {
-    json += String(((i + 1) == stableOuts) ? 1 : 0);
+    json += String((i < stableOuts) ? 1 : 0);
     if (i < 1) json += ",";
   }
   json += "],";

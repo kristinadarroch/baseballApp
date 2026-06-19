@@ -42,18 +42,18 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 1,
         }),
       } as Response);
@@ -84,9 +84,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -105,9 +105,9 @@ describe('ConnectionContext', () => {
         mockFetch.mockResolvedValueOnce({
           ok: true,
           json: async () => ({
-            balls: [0, 0, 0, 0],
-            strikes: [0, 0, 0],
-            outs: [0, 0, 0],
+            balls: [0, 0, 0],
+            strikes: [0, 0],
+            outs: [0, 0],
             run,
           }),
         } as Response);
@@ -129,9 +129,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -148,9 +148,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 1,
         }),
       } as Response);
@@ -167,9 +167,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 1, // Still high
         }),
       } as Response);
@@ -190,9 +190,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -208,9 +208,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 1,
         }),
       } as Response);
@@ -235,9 +235,9 @@ describe('ConnectionContext', () => {
   describe('Connection', () => {
     it('should set isConnected to true on successful connection', async () => {
       const mockData: GameState = {
-        balls: [0, 0, 0, 0],
-        strikes: [0, 0, 0],
-        outs: [0, 0, 0],
+        balls: [0, 0, 0],
+        strikes: [0, 0],
+        outs: [0, 0],
         run: 0,
       };
 
@@ -279,9 +279,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -315,9 +315,9 @@ describe('ConnectionContext', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({
-            balls: [0, 0, 0, 0],
-            strikes: [0, 0, 0],
-            outs: [0, 0, 0],
+            balls: [0, 0, 0],
+            strikes: [0, 0],
+            outs: [0, 0],
             run: 0,
           }),
         } as Response);
@@ -342,12 +342,12 @@ describe('ConnectionContext', () => {
     });
   });
 
-  describe('Button Press Detection (Rising Edge)', () => {
-    it('should detect ball button 2 press and set count to 2', async () => {
+  describe('Rotary Count Detection', () => {
+    it('should derive ball 2 from a latched pin array', async () => {
       const mockData: GameState = {
-        balls: [0, 1, 0, 0], // Button 2 pressed
-        strikes: [0, 0, 0],
-        outs: [0, 0, 0],
+        balls: [1, 1, 0],
+        strikes: [0, 0],
+        outs: [0, 0],
         run: 0,
       };
 
@@ -367,11 +367,11 @@ describe('ConnectionContext', () => {
       });
     });
 
-    it('should detect strike button 1 press and set count to 1', async () => {
+    it('should still derive strike 1 from a position-only pin array', async () => {
       const mockData: GameState = {
-        balls: [0, 0, 0, 0],
-        strikes: [1, 0, 0], // Button 1 pressed
-        outs: [0, 0, 0],
+        balls: [0, 0, 0],
+        strikes: [1, 0],
+        outs: [0, 0],
         run: 0,
       };
 
@@ -391,11 +391,11 @@ describe('ConnectionContext', () => {
       });
     });
 
-    it('should detect out button 3 press and set count to 3', async () => {
+    it('should derive out 2 from the two displayed out pins', async () => {
       const mockData: GameState = {
-        balls: [0, 0, 0, 0],
-        strikes: [0, 0, 0],
-        outs: [0, 0, 1], // Button 3 pressed
+        balls: [0, 0, 0],
+        strikes: [0, 0],
+        outs: [1, 1],
         run: 0,
       };
 
@@ -411,7 +411,7 @@ describe('ConnectionContext', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.outs).toBe(3);
+        expect(result.current.outs).toBe(2);
       });
     });
   });
@@ -424,9 +424,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 1, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [1, 1, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -439,28 +439,13 @@ describe('ConnectionContext', () => {
         expect(result.current.balls).toBe(2);
       });
 
-
-    //   here
-    // so the arrays are the highs of the buttons pressed on the esp32 board
-    // example: balls: [0, 1, 0, 0] means ball 2 is high, so there have been 2 balls
-    // example: outs: [0, 0, 1] means out 3 is high, so there have been 3 outs
-    // example: strikes: [0, 1, 0] means strike 2 is high, so there have been 2 strikes
-    // example runs: the users presses the run button for the first time, so there have been 1 run
-    // example runs: the users presses the run button for the second time, so there have been 2 runs
-    // example runs: the users presses the run button for the third time, so there have been 3 runs
-    // example runs: the users presses the run button for the fourth time, so there have been 4 runs
-    // example runs: the users presses the run button for the fifth time, so there have been 5 runs
-    // example runs: the users presses the run button for the sixth time, so there have been 6 runs
-    // example runs: the users presses the run button for the seventh time, so there have been 7 runs
-    // example runs: the users presses the run button for the eighth time, so there have been 8 runs
-
-      // Second: Button released but state should persist
+      // Second: Wheel returned to zero.
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0], // Released - but NOT all zeros from our perspective yet
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -484,9 +469,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 1, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [1, 1, 1],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -503,9 +488,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -528,9 +513,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 1, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [1, 1, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -547,9 +532,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 1, 0, 0], // Still pressed
-          strikes: [1, 0, 0], // Strike added
-          outs: [0, 0, 0],
+          balls: [1, 1, 0], // Still pressed
+          strikes: [1, 0], // Strike added
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -572,9 +557,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 1, 0, 0],
-          strikes: [0, 1, 0],
-          outs: [0, 0, 0],
+          balls: [1, 1, 0],
+          strikes: [1, 1],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -592,9 +577,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0], // Reset
-          strikes: [0, 1, 0], // Still set
-          outs: [0, 0, 0],
+          balls: [0, 0, 0], // Reset
+          strikes: [1, 1], // Still set
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -618,9 +603,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({
-          balls: [0, 1, 0, 0],
-          strikes: [1, 0, 0],
-          outs: [0, 1, 0],
+          balls: [1, 1, 0],
+          strikes: [1, 0],
+          outs: [1, 1],
           run: 1,
         }),
       } as Response);
@@ -653,9 +638,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);
@@ -692,9 +677,9 @@ describe('ConnectionContext', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({
-          balls: [0, 0, 0, 0],
-          strikes: [0, 0, 0],
-          outs: [0, 0, 0],
+          balls: [0, 0, 0],
+          strikes: [0, 0],
+          outs: [0, 0],
           run: 0,
         }),
       } as Response);

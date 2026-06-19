@@ -36,9 +36,9 @@ const char* ssid = "YOUR_WIFI_NAME";        // Change this!
 const char* password = "YOUR_WIFI_PASSWORD"; // Change this!
 
 // Pin assignments (same as before)
-const int ballPins[4]   = {20, 8, 9, 10};
-const int strikePins[3] = {5, 6, 7};
-const int outPins[3]    = {2, 3, 4};
+const int ballPins[3]   = {20, 8, 9};
+const int strikePins[2] = {5, 6};
+const int outPins[2]    = {2, 3};
 const int runPin        = 21;
 
 WebServer server(80);
@@ -46,15 +46,15 @@ WebServer server(80);
 void handleRoot() {
   String html = "<h1>Baseball Clicker</h1>";
   html += "<p>Balls:</p>";
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 3; i++) {
     html += "Ball " + String(i+1) + ": " + String(digitalRead(ballPins[i]) == LOW ? "Pressed" : "Unpressed") + "<br>";
   }
   html += "<p>Strikes:</p>";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     html += "Strike " + String(i+1) + ": " + String(digitalRead(strikePins[i]) == LOW ? "Pressed" : "Unpressed") + "<br>";
   }
   html += "<p>Outs:</p>";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     html += "Out " + String(i+1) + ": " + String(digitalRead(outPins[i]) == LOW ? "Pressed" : "Unpressed") + "<br>";
   }
   html += "<p>Runs:</p>";
@@ -65,19 +65,19 @@ void handleRoot() {
 void handleStatus() {
   Serial.println("Status endpoint accessed");
   String json = "{\"balls\":[";
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 3; i++) {
     json += String(digitalRead(ballPins[i]) == LOW ? 1 : 0);
-    if (i < 3) json += ",";
+    if (i < 2) json += ",";
   }
   json += "],\"strikes\":[";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     json += String(digitalRead(strikePins[i]) == LOW ? 1 : 0);
-    if (i < 2) json += ",";
+    if (i < 1) json += ",";
   }
   json += "],\"outs\":[";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     json += String(digitalRead(outPins[i]) == LOW ? 1 : 0);
-    if (i < 2) json += ",";
+    if (i < 1) json += ",";
   }
   json += "],\"run\":" + String(digitalRead(runPin) == LOW ? 1 : 0);
   json += "}";
@@ -130,9 +130,9 @@ void setup() {
   server.begin();
   Serial.println("Web server started!");
 
-  for (int i = 0; i < 4; i++) pinMode(ballPins[i], INPUT_PULLUP);
-  for (int i = 0; i < 3; i++) pinMode(strikePins[i], INPUT_PULLUP);
-  for (int i = 0; i < 3; i++) pinMode(outPins[i], INPUT_PULLUP);
+  for (int i = 0; i < 3; i++) pinMode(ballPins[i], INPUT_PULLUP);
+  for (int i = 0; i < 2; i++) pinMode(strikePins[i], INPUT_PULLUP);
+  for (int i = 0; i < 2; i++) pinMode(outPins[i], INPUT_PULLUP);
   pinMode(runPin, INPUT_PULLUP);
 
   Serial.println("Baseball clicker ready!");
@@ -266,4 +266,3 @@ if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
 
 **Best of Both Worlds:**
 Make ESP32 code have a **config mode** that lets you choose AP or Station mode with a button press or config file.
-

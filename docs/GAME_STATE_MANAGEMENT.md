@@ -124,7 +124,7 @@ Run button pressed → Visitor: 1, Home: 0
   ↓
 Continue batting...
   ↓
-3 outs recorded (Out button 3 pressed)
+3 outs recorded (out wheel returns to zero after 2 displayed outs)
 ```
 
 ### Automatic Switch
@@ -319,8 +319,8 @@ The app logs all game state changes:
 ```
 "Beginning new game - Visitor team bats first (top of 1st inning)"
 "Run button pressed, incrementing count to 1"
-"Out button 3 pressed, setting count to 3"
-"3 outs - switching teams"
+"Out count set from pins to 2"
+"INNING CHANGE: Final out reset to 0"
 "Top of inning 1 complete. Home team now batting."
 "Inning 1 complete. Moving to inning 2. Visitor team now batting."
 ```
@@ -420,4 +420,3 @@ All according to official baseball rules! ⚾
 [3] [Which Team Pitches First](https://www.platecrate.com/blogs/baseball-101/which-team-pitches-first-in-baseball-understanding-the-dynamics-of-game-start)
 
 See also: [BASEBALL_GAME_LOGIC.md](./BASEBALL_GAME_LOGIC.md) for complete baseball rules explanation.
-

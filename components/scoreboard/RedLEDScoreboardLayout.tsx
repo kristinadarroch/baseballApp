@@ -15,10 +15,6 @@ export default function RedLEDScoreboardLayout({
   isTablet,
   getInningScore,
 }: ScoreboardLayoutProps) {
-  const ballsArray = Array.from({ length: 4 }, (_, i) => i < balls ? 1 : 0);
-  const strikesArray = Array.from({ length: 3 }, (_, i) => i < strikes ? 1 : 0);
-  const outsArray = Array.from({ length: 3 }, (_, i) => i < outs ? 1 : 0);
-
   const styles = createStyles(themeColors, isTablet);
 
   return (
@@ -283,7 +279,6 @@ const createStyles = (themeColors: any, isTablet: boolean) => StyleSheet.create(
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });
-
 
 
 

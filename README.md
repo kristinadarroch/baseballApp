@@ -32,9 +32,9 @@ Your ESP32C should be running code that:
 3. Returns JSON data in this format:
 ```json
 {
-  "balls": [0,0,0,0],
-  "strikes": [0,0,0],
-  "outs": [0,0,0],
+  "balls": [0,0,0],
+  "strikes": [0,0],
+  "outs": [0,0],
   "run": 0
 }
 ```
@@ -72,9 +72,9 @@ The app recreates the iconic **green outfield wall scoreboard** found in classic
 
 ### ⚾ Bottom Section
 - **AT BAT**: Square display box for current batter
-- **BALL**: Circle indicators (4 total) - fill white when active
-- **STRIKE**: Circle indicators (3 total) - fill white when active  
-- **OUT**: Circle indicators (3 total) - fill white when active
+- **BALL**: Circle indicators (3 total) - fill white when active
+- **STRIKE**: Circle indicators (2 total) - fill white when active
+- **OUT**: Circle indicators (2 total) - fill white when active
 
 ### 📱 Tablet Optimization
 - **Landscape Lock**: Scoreboard automatically locks to landscape orientation for optimal viewing

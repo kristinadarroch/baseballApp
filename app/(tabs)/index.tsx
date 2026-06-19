@@ -17,12 +17,6 @@ export default function HomeScreen() {
   // Get theme colors
   const themeColors = SCOREBOARD_THEMES[scoreboardTheme].colors;
 
-  // Generate display arrays based on counts
-  // If balls = 2, generate [1, 1, 0, 0] to show first 2 circles filled
-  const ballsArray = Array.from({ length: 4 }, (_, i) => i < balls ? 1 : 0);
-  const strikesArray = Array.from({ length: 3 }, (_, i) => i < strikes ? 1 : 0);
-  const outsArray = Array.from({ length: 3 }, (_, i) => i < outs ? 1 : 0);
-
   // Get current batter
   const getCurrentBatter = () => {
     if (!fullGameState.gameStarted) return null;

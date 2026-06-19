@@ -1,5 +1,6 @@
 import React from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
+import { DISPLAYED_BALL_LIGHTS, DISPLAYED_OUT_LIGHTS, DISPLAYED_STRIKE_LIGHTS } from '../../constants/baseball-counts';
 import ScoreboardLayoutProps from './ScoreboardLayoutProps';
 
 export default function BlueDigitalScoreboardLayout({
@@ -15,9 +16,9 @@ export default function BlueDigitalScoreboardLayout({
   isTablet,
   getInningScore,
 }: ScoreboardLayoutProps) {
-  const ballsArray = Array.from({ length: 4 }, (_, i) => i < balls ? 1 : 0);
-  const strikesArray = Array.from({ length: 3 }, (_, i) => i < strikes ? 1 : 0);
-  const outsArray = Array.from({ length: 3 }, (_, i) => i < outs ? 1 : 0);
+  const ballsArray = Array.from({ length: DISPLAYED_BALL_LIGHTS }, (_, i) => i < balls ? 1 : 0);
+  const strikesArray = Array.from({ length: DISPLAYED_STRIKE_LIGHTS }, (_, i) => i < strikes ? 1 : 0);
+  const outsArray = Array.from({ length: DISPLAYED_OUT_LIGHTS }, (_, i) => i < outs ? 1 : 0);
 
   const styles = createStyles(themeColors, isTablet);
 
@@ -260,4 +261,3 @@ const createStyles = (themeColors: any, isTablet: boolean) => StyleSheet.create(
     backgroundColor: themeColors.accentColor,
   }
 });
-

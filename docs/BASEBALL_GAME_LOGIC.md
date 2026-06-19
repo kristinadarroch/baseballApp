@@ -288,42 +288,39 @@ Compare Scores
 
 ### How the Scoreboard App Tracks Game State
 
-#### 1. Balls (0-4)
-**Hardware**: 4 buttons on ESP32C
+#### 1. Balls (0-3 displayed)
+**Hardware**: 3 displayed ball pins on ESP32C; ball 4 is implied as a walk.
 ```
-Button 1: [1,0,0,0] → 1 ball
-Button 2: [0,1,0,0] → 2 balls
-Button 3: [0,0,1,0] → 3 balls
-Button 4: [0,0,0,1] → 4 balls (WALK)
-Reset:    [0,0,0,0] → 0 balls
-```
-
-**Display**: Circles light up left-to-right
-- 2 balls: ⚪⚪⚫⚫
-
-#### 2. Strikes (0-3)
-**Hardware**: 3 buttons on ESP32C
-```
-Button 1: [1,0,0] → 1 strike
-Button 2: [0,1,0] → 2 strikes
-Button 3: [0,0,1] → 3 strikes (STRIKEOUT)
-Reset:    [0,0,0] → 0 strikes
+Ball 1: [1,0,0] → 1 ball
+Ball 2: [1,1,0] → 2 balls
+Ball 3: [1,1,1] → 3 balls
+Reset:  [0,0,0] → 0 balls
 ```
 
 **Display**: Circles light up left-to-right
-- 2 strikes: ⚪⚪⚫
+- 2 balls: ⚪⚪⚫
 
-#### 3. Outs (0-3)
-**Hardware**: 3 buttons on ESP32C
+#### 2. Strikes (0-2 displayed)
+**Hardware**: 2 displayed strike pins on ESP32C; strike 3 is implied as a strikeout.
 ```
-Button 1: [1,0,0] → 1 out
-Button 2: [0,1,0] → 2 outs
-Button 3: [0,0,1] → 3 outs (END HALF-INNING)
-Reset:    [0,0,0] → 0 outs
+Strike 1: [1,0] → 1 strike
+Strike 2: [1,1] → 2 strikes
+Reset:    [0,0] → 0 strikes
 ```
 
 **Display**: Circles light up left-to-right
-- 2 outs: ⚪⚪⚫
+- 2 strikes: ⚪⚪
+
+#### 3. Outs (0-2 displayed)
+**Hardware**: 2 displayed out pins on ESP32C; the third out is implied when the wheel returns to zero from 2 outs.
+```
+Out 1: [1,0] → 1 out
+Out 2: [1,1] → 2 outs
+Reset: [0,0] → 0 outs / hidden third out after 2 outs
+```
+
+**Display**: Circles light up left-to-right
+- 2 outs: ⚪⚪
 
 #### 4. Runs (0-∞)
 **Hardware**: 1 toggle/latch button on ESP32C (incremental counter)
@@ -358,33 +355,33 @@ Toggle 5: 1→0 (latches LOW)   → 5 runs scored
 2. **First Pitch: Ball**
    - Operator presses Ball button 1
    - Balls: 1, Strikes: 0
-   - Display: ⚪⚫⚫⚫ | ⚫⚫⚫ | ⚫⚫⚫
+   - Display: ⚪⚫⚫ | ⚫⚫ | ⚫⚫
 
 3. **Second Pitch: Strike**
    - Operator presses Strike button 1
    - Balls: 1, Strikes: 1 (Count: 1-1)
-   - Display: ⚪⚫⚫⚫ | ⚪⚫⚫ | ⚫⚫⚫
+   - Display: ⚪⚫⚫ | ⚪⚫ | ⚫⚫
 
 4. **Third Pitch: Ball**
    - Operator presses Ball button 2
    - Balls: 2, Strikes: 1 (Count: 2-1)
-   - Display: ⚪⚪⚫⚫ | ⚪⚫⚫ | ⚫⚫⚫
+   - Display: ⚪⚪⚫ | ⚪⚫ | ⚫⚫
 
 5. **Fourth Pitch: Foul Ball (Strike)**
    - Operator presses Strike button 2
    - Balls: 2, Strikes: 2 (Count: 2-2)
-   - Display: ⚪⚪⚫⚫ | ⚪⚪⚫ | ⚫⚫⚫
+   - Display: ⚪⚪⚫ | ⚪⚪ | ⚫⚫
 
 6. **Fifth Pitch: Ball**
    - Operator presses Ball button 3
    - Balls: 3, Strikes: 2 (Full Count: 3-2)
-   - Display: ⚪⚪⚪⚫ | ⚪⚪⚫ | ⚫⚫⚫
+   - Display: ⚪⚪⚪ | ⚪⚪ | ⚫⚫
 
 7. **Sixth Pitch: Home Run!**
    - Operator resets balls/strikes to 0-0
    - Operator presses Run button (runs++)
    - New batter, clean count
-   - Display: ⚫⚫⚫⚫ | ⚫⚫⚫ | ⚫⚫⚫ | Runs: 1
+   - Display: ⚫⚫⚫ | ⚫⚫ | ⚫⚫ | Runs: 1
 
 ### When to Reset Counts
 
@@ -494,4 +491,3 @@ The scoreboard app mirrors this logic with hardware buttons that set these state
 [12] [Foul Ball Limits Discussion - Reddit](https://www.reddit.com/r/mlb/comments/1d3kij0/how_long_before_mlb_limits_the_number_of_foul/)  
 [13] [Baseball - Wikipedia](https://en.wikipedia.org/wiki/Baseball)  
 [14] [Baseball 101: Rules - NBC Olympics](https://www.nbcolympics.com/news/baseball-101-rules)
-

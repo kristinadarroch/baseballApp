@@ -15,6 +15,7 @@ const STATUS_REQUEST_TIMEOUT_MS = 1500;
 const CONNECT_REQUEST_TIMEOUT_MS = 5000;
 const MAX_CONSECUTIVE_FAILURES = 3;
 const OUTS_PER_HALF_INNING = 3;
+const RESET_DEBOUNCE_MS = 500;
 
 export interface GameState {
   balls: number[];
@@ -120,11 +121,6 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   // At-bat logging
   const [atBatLog, setAtBatLog] = useState<AtBatLog[]>([]);
 
-  // Track previous button states to detect press events (rising edge 0->1)
-  const prevBallStateRef = useRef<number[]>([0, 0, 0, 0]);
-  const prevStrikeStateRef = useRef<number[]>([0, 0, 0]);
-  const prevOutStateRef = useRef<number[]>([0, 0, 0]);
-  
   // Use ref for run state to avoid async state update issues
   const prevRunStateRef = useRef<number>(0);
   
@@ -163,14 +159,25 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setIsConnected(connected);
   };
 
+  const getActivePinCount = (pins: number[]) =>
+    pins.reduce((highestActivePin, pinState, index) => {
+      return pinState === 1 ? index + 1 : highestActivePin;
+    }, 0);
+
   const advanceBatterForOut = (outCount: number) => {
+    if (outCount <= prevOutCountRef.current) {
+      return;
+    }
+
+    const previousOutCount = prevOutCountRef.current;
+    prevOutCountRef.current = outCount;
+
     setFullGameState(prevState => {
       if (!prevState.gameStarted) {
         return prevState;
       }
 
-      console.log(`Out count increased: ${prevOutCountRef.current} → ${outCount}. Advancing batter.`);
-      prevOutCountRef.current = outCount;
+      console.log(`Out count increased: ${previousOutCount} → ${outCount}. Advancing batter.`);
 
       const isVisitor = prevState.currentBatterTeam === 'visitor';
       const currentPos = isVisitor ? prevState.visitorBatterPosition : prevState.homeBatterPosition;
@@ -312,14 +319,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       const data: GameState = await response.json();
       setGameState(data);
       
-      // Detect button press events (rising edge: 0 -> 1)
-      // it will go high and latch, that is a run, then you will press again and it will latch low, that is a run
-
-      
-      // Check balls for button press or reset (with debounce for rotary switches)
-      const allBallsZero = data.balls.every(b => b === 0);
-      if (allBallsZero) {
-        // All switches off - but wait 200ms before resetting (debounce for rotary switch transitions)
+      // Balls/strikes/outs are rotary positions. The wheel now latches previous
+      // count pins, so derive the current count from the highest active pin.
+      const nextBallCount = getActivePinCount(data.balls);
+      if (nextBallCount === 0) {
         if (!ballResetTimerRef.current) {
           ballResetTimerRef.current = setTimeout(() => {
             setBalls(prev => {
@@ -330,31 +333,24 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
               return prev;
             });
             ballResetTimerRef.current = null;
-          }, 500);
+          }, RESET_DEBOUNCE_MS);
         }
       } else {
-        // Cancel any pending reset
         if (ballResetTimerRef.current) {
           clearTimeout(ballResetTimerRef.current);
           ballResetTimerRef.current = null;
         }
-        
-        // Check for button presses
-        data.balls.forEach((current, index) => {
-          if (current === 1 && prevBallStateRef.current[index] === 0) {
-            // Button pressed (rising edge detected)
-            const newCount = index + 1; // Button 0 = 1 ball, Button 1 = 2 balls, etc.
-            console.log(`Ball button ${index + 1} pressed, setting count to ${newCount}`);
-            setBalls(newCount);
+
+        setBalls(prev => {
+          if (prev !== nextBallCount) {
+            console.log(`Ball count set from pins to ${nextBallCount}`);
           }
+          return nextBallCount;
         });
       }
-      prevBallStateRef.current = data.balls;
       
-      // Check strikes for button press or reset (with debounce for rotary switches)
-      const allStrikesZero = data.strikes.every(s => s === 0);
-      if (allStrikesZero) {
-        // All switches off - but wait 200ms before resetting (debounce for rotary switch transitions)
+      const nextStrikeCount = getActivePinCount(data.strikes);
+      if (nextStrikeCount === 0) {
         if (!strikeResetTimerRef.current) {
           strikeResetTimerRef.current = setTimeout(() => {
             setStrikes(prev => {
@@ -365,30 +361,25 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
               return prev;
             });
             strikeResetTimerRef.current = null;
-          }, 500);
+          }, RESET_DEBOUNCE_MS);
         }
       } else {
-        // Cancel any pending reset
         if (strikeResetTimerRef.current) {
           clearTimeout(strikeResetTimerRef.current);
           strikeResetTimerRef.current = null;
         }
-        
-        data.strikes.forEach((current, index) => {
-          if (current === 1 && prevStrikeStateRef.current[index] === 0) {
-            const newCount = index + 1;
-            console.log(`Strike button ${index + 1} pressed, setting count to ${newCount}`);
-            setStrikes(newCount);
+
+        setStrikes(prev => {
+          if (prev !== nextStrikeCount) {
+            console.log(`Strike count set from pins to ${nextStrikeCount}`);
           }
+          return nextStrikeCount;
         });
       }
-      prevStrikeStateRef.current = data.strikes;
       
-      // Check outs for button press or reset (SIMPLIFIED)
-      const allOutsZero = data.outs.every(o => o === 0);
-      if (allOutsZero) {
+      const nextOutCount = getActivePinCount(data.outs);
+      if (nextOutCount === 0) {
         const displayedOutPositions = data.outs.length;
-        // All switches off - debounce before resetting
         if (!outResetTimerRef.current) {
           outResetTimerRef.current = setTimeout(() => {
             setOuts(prev => {
@@ -415,30 +406,25 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
               return prev;
             });
             outResetTimerRef.current = null;
-          }, 500);
+          }, RESET_DEBOUNCE_MS);
         }
       } else {
-        // Cancel any pending reset
         if (outResetTimerRef.current) {
           clearTimeout(outResetTimerRef.current);
           outResetTimerRef.current = null;
         }
-        
-        // Check for button presses - record the out count and advance batter if increased
-        data.outs.forEach((current, index) => {
-          if (current === 1 && prevOutStateRef.current[index] === 0) {
-            const newCount = index + 1;
-            console.log(`⚾ Out ${newCount} recorded`);
-            setOuts(newCount);
 
-            // Check if this is a NEW out (count increased from previous) and advance batter
-            if (newCount > prevOutCountRef.current) {
-              advanceBatterForOut(newCount);
-            }
+        setOuts(prev => {
+          if (prev !== nextOutCount) {
+            console.log(`⚾ Out count set from pins to ${nextOutCount}`);
           }
+          return nextOutCount;
         });
+
+        if (nextOutCount > prevOutCountRef.current) {
+          advanceBatterForOut(nextOutCount);
+        }
       }
-      prevOutStateRef.current = data.outs;
       
       // Check run button for toggle (latch)
       // Run button toggles: high→low OR low→high both count as 1 run
@@ -774,9 +760,6 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setStrikes(0);
     setOuts(0);
     setRuns(0);
-    prevBallStateRef.current = [0, 0, 0, 0];
-    prevStrikeStateRef.current = [0, 0, 0];
-    prevOutStateRef.current = [0, 0, 0];
     prevRunStateRef.current = gameState?.run ?? prevRunStateRef.current;
     runButtonInitializedRef.current = true;  // Begin from the latest connected reading.
     currentHalfInningRunsRef.current = 0;  // Reset half-inning runs
@@ -867,9 +850,6 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setStrikes(0);
     setOuts(0);
     setRuns(0);
-    prevBallStateRef.current = [0, 0, 0, 0];
-    prevStrikeStateRef.current = [0, 0, 0];
-    prevOutStateRef.current = [0, 0, 0];
     prevRunStateRef.current = 0;
     runButtonInitializedRef.current = false;
   };

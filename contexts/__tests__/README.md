@@ -17,10 +17,10 @@ Comprehensive test suite for the Baseball Scoreboard ConnectionContext.
 - **Successful connection**: Confirms `isConnected` becomes true and gameState is set
 - **Connection failure**: Ensures errors are captured and connection fails gracefully
 
-### ✅ Button Press Detection - Rising Edge (3 tests)
-- **Ball button press**: Tests button 2 (index 1) sets count to 2
-- **Strike button press**: Tests button 1 (index 0) sets count to 1  
-- **Out button press**: Tests button 3 (index 2) sets count to 3
+### ✅ Rotary Count Detection (3 tests)
+- **Ball count**: Tests latched ball 2 state sets count to 2
+- **Strike count**: Tests position-only strike 1 state still sets count to 1
+- **Out count**: Tests the two displayed out pins set count to 2
 
 ### ✅ Persistent State (1 test)
 - **Count persistence**: Verifies count stays set even after button release
@@ -37,7 +37,7 @@ Comprehensive test suite for the Baseball Scoreboard ConnectionContext.
 - **State cleanup**: Verifies all state is reset on disconnect (including runs)
 
 ### ✅ Polling (2 tests)
-- **Poll interval**: Confirms fetching happens every 500ms
+- **Poll interval**: Confirms fetching happens every 150ms
 - **Stop polling**: Ensures polling stops after disconnect
 
 ## Running Tests
@@ -65,13 +65,13 @@ npm run test:coverage
 
 ## What's Being Tested
 
-### Edge Detection Logic
-The tests verify the "rising edge" detection that makes button presses work:
+### Count Detection Logic
+The tests verify the highest-active-pin detection that makes the rotary wheels work:
 
-**For Balls/Strikes/Outs (Positional):**
-- Previous: `[0,0,0,0]`, Current: `[0,1,0,0]` → Detected press on button 2
-- Previous: `[0,1,0,0]`, Current: `[0,1,0,0]` → No change (button held)
-- Previous: `[0,1,0,0]`, Current: `[0,0,0,0]` → Reset (all zeros)
+**For Balls/Strikes/Outs (Latched):**
+- Current balls: `[1,1,0]` -> Count is 2
+- Current strikes: `[1,1]` -> Count is 2
+- Current outs: `[1,1]` -> Count is 2; the next all-zero reset is treated as the hidden third out
 
 **For Runs (Toggle/Latch Counter):**
 - Previous: `0`, Current: `1` → State changed, increment counter (runs++)
@@ -82,7 +82,7 @@ The tests verify the "rising edge" detection that makes button presses work:
 
 ### State Persistence
 Tests confirm that once a button is pressed and sets the count, that count persists until:
-1. **Balls/Strikes/Outs**: A different button is pressed (sets new count) OR all buttons are released (resets to 0)
+1. **Balls/Strikes/Outs**: The wheel reports a different highest active pin OR all buttons are released (resets to 0)
 2. **Runs**: Count increments with each press and never decreases (except on disconnect)
 
 ### Independent State Management
@@ -90,26 +90,25 @@ Each type (balls, strikes, outs, runs) is completely independent:
 - Changing balls doesn't affect strikes, outs, or runs
 - Resetting strikes doesn't affect balls, outs, or runs
 - Run counter increments independently of game state
-- Each tracks its own previous state for edge detection
 
 ## Mock Data Examples
 
 ### All Buttons Released
 ```json
 {
-  "balls": [0, 0, 0, 0],
-  "strikes": [0, 0, 0],
-  "outs": [0, 0, 0],
+  "balls": [0, 0, 0],
+  "strikes": [0, 0],
+  "outs": [0, 0],
   "run": 0
 }
 ```
 
-### Button 2 Pressed for Balls
+### Ball 2 Latched
 ```json
 {
-  "balls": [0, 1, 0, 0],
-  "strikes": [0, 0, 0],
-  "outs": [0, 0, 0],
+  "balls": [1, 1, 0],
+  "strikes": [0, 0],
+  "outs": [0, 0],
   "run": 0
 }
 ```
@@ -117,9 +116,9 @@ Each type (balls, strikes, outs, runs) is completely independent:
 ### Multiple Indicators Set
 ```json
 {
-  "balls": [0, 1, 0, 0],
-  "strikes": [0, 1, 0],
-  "outs": [0, 0, 1],
+  "balls": [1, 1, 0],
+  "strikes": [1, 1],
+  "outs": [1, 1],
   "run": 1
 }
 ```
@@ -179,4 +178,3 @@ These tests should be run:
 - ✅ Before every commit
 - ✅ In CI/CD pipeline
 - ✅ Before releasing new versions
-

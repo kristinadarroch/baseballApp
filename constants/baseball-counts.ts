@@ -1,0 +1,3 @@
+export const DISPLAYED_BALL_LIGHTS = 3;
+export const DISPLAYED_STRIKE_LIGHTS = 2;
+export const DISPLAYED_OUT_LIGHTS = 2;

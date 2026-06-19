@@ -12,7 +12,8 @@
 const int ballPins[]   = {D4, D6, D5}; // Ball 1=PIN 5/D4, 2=PIN 7/D6, 3=PIN 6/D5; ball 4 is not displayed.
 const int strikePins[] = {D3, D2};     // Strike 1=PIN 4/D3, 2=PIN 3/D2; strike 3 is not displayed.
 const int outPins[]    = {D0, D1};     // Out 1=PIN 1/D0, 2=PIN 2/D1.
-const int runPin       = D7;           // Run button=PIN 8/D7; the app counts both state transitions.
+const int runPin       = D8;           // Run button=D8; the app counts both state transitions.
+const int sleepSwitch  = D7;           // Sleep switch=D7 (reserved; not implemented yet).
 const int configButton = 9;            // BOOT button for config mode; keep it off header D0.
 
 const int ballPinCount   = sizeof(ballPins) / sizeof(ballPins[0]);
@@ -56,7 +57,8 @@ void printPinMap() {
   Serial.printf("  Strike 2 PIN 3/D2 -> GPIO %d\n", strikePins[1]);
   Serial.printf("  Out 1 PIN 1/D0 -> GPIO %d\n", outPins[0]);
   Serial.printf("  Out 2 PIN 2/D1 -> GPIO %d\n", outPins[1]);
-  Serial.printf("  Run PIN 8/D7 -> GPIO %d\n", runPin);
+  Serial.printf("  Run D8 -> GPIO %d\n", runPin);
+  Serial.printf("  Sleep switch D7 -> GPIO %d (reserved)\n", sleepSwitch);
   Serial.printf("  Config BOOT -> GPIO %d\n", configButton);
 }
 
@@ -67,6 +69,8 @@ void setup() {
   for (int i = 0; i < ballPinCount; i++) pinMode(ballPins[i], INPUT_PULLUP);
   for (int i = 0; i < strikePinCount; i++) pinMode(strikePins[i], INPUT_PULLUP);
   for (int i = 0; i < outPinCount; i++) pinMode(outPins[i], INPUT_PULLUP);
+  // D7 is reserved for the future sleep switch and is intentionally not read
+  // until sleep mode is implemented.
   pinMode(runPin, INPUT_PULLUP);
   pinMode(configButton, INPUT_PULLUP);
   
@@ -330,20 +334,20 @@ int readGroupCount(const int *pins, int length) {
 }
 
 void handleStatus() {
-  // Position-based arrays: count=2 means [0,1,0] (only active wired/displayed position is 1)
+  // Latched scoreboard arrays: count=2 means [1,1,0].
   String json = "{\"balls\":[";
   for (int i = 0; i < ballPinCount; i++) {
-    json += String(((i + 1) == stableBalls) ? 1 : 0);
+    json += String((i < stableBalls) ? 1 : 0);
     if (i < ballPinCount - 1) json += ",";
   }
   json += "],\"strikes\":[";
   for (int i = 0; i < strikePinCount; i++) {
-    json += String(((i + 1) == stableStrikes) ? 1 : 0);
+    json += String((i < stableStrikes) ? 1 : 0);
     if (i < strikePinCount - 1) json += ",";
   }
   json += "],\"outs\":[";
   for (int i = 0; i < outPinCount; i++) {
-    json += String(((i + 1) == stableOuts) ? 1 : 0);
+    json += String((i < stableOuts) ? 1 : 0);
     if (i < outPinCount - 1) json += ",";
   }
   json += "],\"run\":" + String(stableRun);

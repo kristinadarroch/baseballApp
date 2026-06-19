@@ -8,11 +8,12 @@
 
 // Pin assignments from the physical pinout sheet.
 // Wheel position 0 is the shared GND on physical pin 13.
-const int ballPins[]   = {6, 21, 7}; // Ball 1=PIN 5/GPIO6, 2=PIN 7/GPIO21, 3=PIN 6/GPIO7; ball 4 is not displayed.
-const int strikePins[] = {5, 4};     // Strike 1=PIN 4/GPIO5, 2=PIN 3/GPIO4; strike 3 is not displayed.
-const int outPins[]    = {2, 3};     // Out 1=PIN 1/GPIO2, 2=PIN 2/GPIO3.
-const int runPin       = 20;         // Run button=PIN 8/GPIO20; the app counts both state transitions.
-const int configButton  = 0; // BOOT button for config mode
+// Use XIAO board D-pin aliases so the sketch follows the physical header labels.
+const int ballPins[]   = {D4, D6, D5}; // Ball 1=PIN 5/D4, 2=PIN 7/D6, 3=PIN 6/D5; ball 4 is not displayed.
+const int strikePins[] = {D3, D2};     // Strike 1=PIN 4/D3, 2=PIN 3/D2; strike 3 is not displayed.
+const int outPins[]    = {D0, D1};     // Out 1=PIN 1/D0, 2=PIN 2/D1.
+const int runPin       = D7;           // Run button=PIN 8/D7; the app counts both state transitions.
+const int configButton = 9;            // BOOT button for config mode; keep it off header D0.
 
 const int ballPinCount   = sizeof(ballPins) / sizeof(ballPins[0]);
 const int strikePinCount = sizeof(strikePins) / sizeof(strikePins[0]);
@@ -45,6 +46,19 @@ int lastSampleStrikes = -1;
 int lastSampleOuts    = -1;
 int lastSampleRun     = -1;
 bool lastSampleValid  = false;
+
+void printPinMap() {
+  Serial.println("Resolved XIAO header pin map:");
+  Serial.printf("  Ball 1 PIN 5/D4 -> GPIO %d\n", ballPins[0]);
+  Serial.printf("  Ball 2 PIN 7/D6 -> GPIO %d\n", ballPins[1]);
+  Serial.printf("  Ball 3 PIN 6/D5 -> GPIO %d\n", ballPins[2]);
+  Serial.printf("  Strike 1 PIN 4/D3 -> GPIO %d\n", strikePins[0]);
+  Serial.printf("  Strike 2 PIN 3/D2 -> GPIO %d\n", strikePins[1]);
+  Serial.printf("  Out 1 PIN 1/D0 -> GPIO %d\n", outPins[0]);
+  Serial.printf("  Out 2 PIN 2/D1 -> GPIO %d\n", outPins[1]);
+  Serial.printf("  Run PIN 8/D7 -> GPIO %d\n", runPin);
+  Serial.printf("  Config BOOT -> GPIO %d\n", configButton);
+}
 
 void setup() {
   Serial.begin(115200);
@@ -92,6 +106,7 @@ void setup() {
   server.begin();
   
   Serial.println("✓ Web server started!");
+  printPinMap();
   Serial.println("✓ Baseball clicker ready!");
   Serial.println("====================================");
   printCurrentMode();

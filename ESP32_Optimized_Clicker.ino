@@ -9,10 +9,10 @@
  * - No dependence on previous state for correctness
  *
  * Hardware Pin Assignments:
- * - Strike Wheel: 0=PIN 13/GND, 1=PIN 4/GPIO5, 2=PIN 3/GPIO4 (Strike 3 not displayed)
- * - Ball Wheel: 0=PIN 13/GND, 1=PIN 5/GPIO6, 2=PIN 7/GPIO21, 3=PIN 6/GPIO7 (Ball 4 not displayed)
- * - Out Wheel: 0=PIN 13/GND, 1=PIN 1/GPIO2, 2=PIN 2/GPIO3
- * - Run Button: PIN 8/GPIO20
+ * - Strike Wheel: 0=PIN 13/GND, 1=PIN 4/D3, 2=PIN 3/D2 (Strike 3 not displayed)
+ * - Ball Wheel: 0=PIN 13/GND, 1=PIN 5/D4, 2=PIN 7/D6, 3=PIN 6/D5 (Ball 4 not displayed)
+ * - Out Wheel: 0=PIN 13/GND, 1=PIN 1/D0, 2=PIN 2/D1
+ * - Run Button: PIN 8/D7
  * - Inning: Removed (determined by outs in the app)
  */
 
@@ -23,11 +23,11 @@
 const char* apSSID = "BaseballClicker";
 const char* apPassword = "playball123";
 
-// Pin assignments for roller inputs
-const int BALL_PINS[]   = {6, 21, 7};      // Ball 1=PIN 5/GPIO6, 2=PIN 7/GPIO21, 3=PIN 6/GPIO7
-const int STRIKE_PINS[] = {5, 4};          // Strike 1=PIN 4/GPIO5, 2=PIN 3/GPIO4
-const int OUT_PINS[]    = {2, 3};          // Out 1=PIN 1/GPIO2, 2=PIN 2/GPIO3
-const int RUN_PIN       = 20;              // Run button=PIN 8/GPIO20
+// Use XIAO board D-pin aliases so the sketch follows the physical header labels.
+const int BALL_PINS[]   = {D4, D6, D5};    // Ball 1=PIN 5/D4, 2=PIN 7/D6, 3=PIN 6/D5
+const int STRIKE_PINS[] = {D3, D2};        // Strike 1=PIN 4/D3, 2=PIN 3/D2
+const int OUT_PINS[]    = {D0, D1};        // Out 1=PIN 1/D0, 2=PIN 2/D1
+const int RUN_PIN       = D7;              // Run button=PIN 8/D7
 
 // Stable counts (what we display/report)
 int stableBalls   = 0;
@@ -44,6 +44,18 @@ bool lastSampleValid  = false;
 
 // Web server
 WebServer server(80);
+
+void printPinMap() {
+  Serial.println("Resolved XIAO header pin map:");
+  Serial.printf("  Ball 1 PIN 5/D4 -> GPIO %d\n", BALL_PINS[0]);
+  Serial.printf("  Ball 2 PIN 7/D6 -> GPIO %d\n", BALL_PINS[1]);
+  Serial.printf("  Ball 3 PIN 6/D5 -> GPIO %d\n", BALL_PINS[2]);
+  Serial.printf("  Strike 1 PIN 4/D3 -> GPIO %d\n", STRIKE_PINS[0]);
+  Serial.printf("  Strike 2 PIN 3/D2 -> GPIO %d\n", STRIKE_PINS[1]);
+  Serial.printf("  Out 1 PIN 1/D0 -> GPIO %d\n", OUT_PINS[0]);
+  Serial.printf("  Out 2 PIN 2/D1 -> GPIO %d\n", OUT_PINS[1]);
+  Serial.printf("  Run PIN 8/D7 -> GPIO %d\n", RUN_PIN);
+}
 
 /**
  * Read a group of pins and return the count (0 to length)
@@ -108,6 +120,7 @@ void setup() {
   server.begin();
   
   Serial.println("Web server started!");
+  printPinMap();
   Serial.println("Optimized clicker ready - <50ms response time");
 }
 

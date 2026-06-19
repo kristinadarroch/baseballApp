@@ -133,6 +133,103 @@ describe('ConnectionContext clicker game E2E flow', () => {
     jest.useRealTimers();
   });
 
+  describe('individual clicker positions', () => {
+    it.each([
+      ['Ball 1', 1],
+      ['Ball 2', 2],
+      ['Ball 3', 3],
+    ])('records %s from the ball wheel', async (_label, ballCount) => {
+      const { result } = renderHook(() => useConnection(), { wrapper });
+
+      await startConnectedGame(result);
+      await pollClicker(clickerState({ balls: ballCount }));
+
+      await waitFor(() => {
+        expect(result.current.balls).toBe(ballCount);
+        expect(result.current.strikes).toBe(0);
+        expect(result.current.outs).toBe(0);
+        expect(result.current.runs).toBe(0);
+      });
+
+      act(() => {
+        result.current.disconnect();
+      });
+    });
+
+    it.each([
+      ['Strike 1', 1],
+      ['Strike 2', 2],
+    ])('records %s from the strike wheel', async (_label, strikeCount) => {
+      const { result } = renderHook(() => useConnection(), { wrapper });
+
+      await startConnectedGame(result);
+      await pollClicker(clickerState({ strikes: strikeCount }));
+
+      await waitFor(() => {
+        expect(result.current.balls).toBe(0);
+        expect(result.current.strikes).toBe(strikeCount);
+        expect(result.current.outs).toBe(0);
+        expect(result.current.runs).toBe(0);
+      });
+
+      act(() => {
+        result.current.disconnect();
+      });
+    });
+
+    it.each([
+      ['Out 1', [1], 1, 1],
+      ['Out 2', [1, 2], 2, 2],
+    ])('records %s from the displayed out wheel', async (
+      _label,
+      outSequence,
+      outCount,
+      batterPosition
+    ) => {
+      const { result } = renderHook(() => useConnection(), { wrapper });
+
+      await startConnectedGame(result);
+      for (const nextOutCount of outSequence) {
+        await pollClicker(clickerState({ outs: nextOutCount }));
+      }
+
+      await waitFor(() => {
+        expect(result.current.balls).toBe(0);
+        expect(result.current.strikes).toBe(0);
+        expect(result.current.outs).toBe(outCount);
+        expect(result.current.runs).toBe(0);
+        expect(result.current.fullGameState.visitorBatterPosition).toBe(batterPosition);
+      });
+
+      act(() => {
+        result.current.disconnect();
+      });
+    });
+
+    it.each([
+      ['Run toggle high', 1, 1],
+      ['Run toggle low', 0, 2],
+    ])('records %s from the run latch', async (_label, runState, expectedRuns) => {
+      const { result } = renderHook(() => useConnection(), { wrapper });
+
+      await startConnectedGame(result);
+      await pollClicker(clickerState({ run: 1 }));
+
+      if (expectedRuns === 2) {
+        await pollClicker(clickerState({ run: runState }));
+      }
+
+      await waitFor(() => {
+        expect(result.current.runs).toBe(expectedRuns);
+        expect(result.current.fullGameState.visitorScore).toBe(expectedRuns);
+      });
+
+      act(() => {
+        result.current.disconnect();
+      });
+    });
+  });
+
   it('treats a two-position out-wheel reset as the hidden third out', async () => {
     const { result } = renderHook(() => useConnection(), { wrapper });
 

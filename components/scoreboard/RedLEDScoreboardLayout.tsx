@@ -286,3 +286,4 @@ const createStyles = (themeColors: any, isTablet: boolean) => StyleSheet.create(
 
 
 
+

@@ -170,3 +170,4 @@ Or if using Expo:
 adb logcat | grep "ExpoModules"
 ```
 
+

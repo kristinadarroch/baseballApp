@@ -3,16 +3,16 @@
  *
  * Features:
  * - Immediate response (<50ms) - no 0.5s delay
- * - Derived count from pin readings (highest pin HIGH = count)
+ * - Derived count from pin readings (highest active LOW pin = count)
  * - Contiguous lighting rule (count=2 means lights 1,2 are ON)
  * - Robust debouncing (10ms loop with 2-sample stability check)
  * - No dependence on previous state for correctness
  *
  * Hardware Pin Assignments:
- * - Strike Wheel: 0=GND, 1=GPIO5, 2=GPIO4 (Strike 3 not displayed)
- * - Ball Wheel: 0=GND, 1=GPIO6, 2=GPIO21, 3=GPIO7 (Ball 4 not displayed)
- * - Out Wheel: 0=GND, 1=GPIO2, 2=GPIO3
- * - Run Button: GPIO20
+ * - Strike Wheel: 0=PIN 13/GND, 1=PIN 4/GPIO5, 2=PIN 3/GPIO4 (Strike 3 not displayed)
+ * - Ball Wheel: 0=PIN 13/GND, 1=PIN 5/GPIO6, 2=PIN 7/GPIO21, 3=PIN 6/GPIO7 (Ball 4 not displayed)
+ * - Out Wheel: 0=PIN 13/GND, 1=PIN 1/GPIO2, 2=PIN 2/GPIO3
+ * - Run Button: PIN 8/GPIO20
  * - Inning: Removed (determined by outs in the app)
  */
 
@@ -24,10 +24,10 @@ const char* apSSID = "BaseballClicker";
 const char* apPassword = "playball123";
 
 // Pin assignments for roller inputs
-const int BALL_PINS[]   = {5, 7, 6};      // Ball 1-3 (GPIO6, GPIO21, GPIO7)
-const int STRIKE_PINS[] = {4, 3};          // Strike 1-2 (GPIO5, GPIO4)
-const int OUT_PINS[]    = {1, 2};          // Out 1-2 (GPIO2, GPIO3)
-const int RUN_PIN       = 8;              // Run button (GPIO20)
+const int BALL_PINS[]   = {6, 21, 7};      // Ball 1=PIN 5/GPIO6, 2=PIN 7/GPIO21, 3=PIN 6/GPIO7
+const int STRIKE_PINS[] = {5, 4};          // Strike 1=PIN 4/GPIO5, 2=PIN 3/GPIO4
+const int OUT_PINS[]    = {2, 3};          // Out 1=PIN 1/GPIO2, 2=PIN 2/GPIO3
+const int RUN_PIN       = 20;              // Run button=PIN 8/GPIO20
 
 // Stable counts (what we display/report)
 int stableBalls   = 0;
@@ -47,8 +47,8 @@ WebServer server(80);
 
 /**
  * Read a group of pins and return the count (0 to length)
- * Count = highest pin index that reads HIGH
- * Example: If pins [0,1,2,3] and pin[1] is HIGH, count = 2
+ * Count = highest pin index that reads LOW
+ * Example: If pins [0,1,2] and pin[1] is LOW, count = 2
  */
 int readGroupCount(const int *pins, int length) {
   int count = 0;

@@ -6,12 +6,17 @@
 #include <WebServer.h>
 #include <Preferences.h>
 
-// Pin assignments
-const int ballPins[4]   = {20, 8, 9, 10};
-const int strikePins[3] = {5, 6, 7};
-const int outPins[3]    = {3, 2, 4};
-const int runPin        = 21;
+// Pin assignments from the physical pinout sheet.
+// Wheel position 0 is the shared GND on physical pin 13.
+const int ballPins[]   = {6, 21, 7}; // Ball 1=PIN 5/GPIO6, 2=PIN 7/GPIO21, 3=PIN 6/GPIO7; ball 4 is not displayed.
+const int strikePins[] = {5, 4};     // Strike 1=PIN 4/GPIO5, 2=PIN 3/GPIO4; strike 3 is not displayed.
+const int outPins[]    = {2, 3};     // Out 1=PIN 1/GPIO2, 2=PIN 2/GPIO3.
+const int runPin       = 20;         // Run button=PIN 8/GPIO20; the app counts both state transitions.
 const int configButton  = 0; // BOOT button for config mode
+
+const int ballPinCount   = sizeof(ballPins) / sizeof(ballPins[0]);
+const int strikePinCount = sizeof(strikePins) / sizeof(strikePins[0]);
+const int outPinCount    = sizeof(outPins) / sizeof(outPins[0]);
 
 // Access Point credentials (fallback mode)
 const char* apSSID = "BaseballClicker";
@@ -45,9 +50,9 @@ void setup() {
   Serial.begin(115200);
   
   // Setup pins
-  for (int i = 0; i < 4; i++) pinMode(ballPins[i], INPUT_PULLUP);
-  for (int i = 0; i < 3; i++) pinMode(strikePins[i], INPUT_PULLUP);
-  for (int i = 0; i < 3; i++) pinMode(outPins[i], INPUT_PULLUP);
+  for (int i = 0; i < ballPinCount; i++) pinMode(ballPins[i], INPUT_PULLUP);
+  for (int i = 0; i < strikePinCount; i++) pinMode(strikePins[i], INPUT_PULLUP);
+  for (int i = 0; i < outPinCount; i++) pinMode(outPins[i], INPUT_PULLUP);
   pinMode(runPin, INPUT_PULLUP);
   pinMode(configButton, INPUT_PULLUP);
   
@@ -191,15 +196,15 @@ void handleRoot() {
   // Show button states
   html += "<div class='info'><h3>🎮 Button States</h3>";
   html += "<p><strong>Balls:</strong> ";
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < ballPinCount; i++) {
     html += String(i+1) + "=" + (digitalRead(ballPins[i]) == LOW ? "ON" : "OFF") + " ";
   }
   html += "</p><p><strong>Strikes:</strong> ";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < strikePinCount; i++) {
     html += String(i+1) + "=" + (digitalRead(strikePins[i]) == LOW ? "ON" : "OFF") + " ";
   }
   html += "</p><p><strong>Outs:</strong> ";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < outPinCount; i++) {
     html += String(i+1) + "=" + (digitalRead(outPins[i]) == LOW ? "ON" : "OFF") + " ";
   }
   html += "</p><p><strong>Run:</strong> ";
@@ -310,21 +315,21 @@ int readGroupCount(const int *pins, int length) {
 }
 
 void handleStatus() {
-  // Position-based arrays: count=2 means [0,1,0,0] (only active position is 1)
+  // Position-based arrays: count=2 means [0,1,0] (only active wired/displayed position is 1)
   String json = "{\"balls\":[";
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < ballPinCount; i++) {
     json += String(((i + 1) == stableBalls) ? 1 : 0);
-    if (i < 3) json += ",";
+    if (i < ballPinCount - 1) json += ",";
   }
   json += "],\"strikes\":[";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < strikePinCount; i++) {
     json += String(((i + 1) == stableStrikes) ? 1 : 0);
-    if (i < 2) json += ",";
+    if (i < strikePinCount - 1) json += ",";
   }
   json += "],\"outs\":[";
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < outPinCount; i++) {
     json += String(((i + 1) == stableOuts) ? 1 : 0);
-    if (i < 2) json += ",";
+    if (i < outPinCount - 1) json += ",";
   }
   json += "],\"run\":" + String(stableRun);
   json += "}";
@@ -361,9 +366,9 @@ void loop() {
   }
   
   // Debounced input sampling (2-sample stability check)
-  int sampleBalls   = readGroupCount(ballPins, 4);
-  int sampleStrikes = readGroupCount(strikePins, 3);
-  int sampleOuts    = readGroupCount(outPins, 3);
+  int sampleBalls   = readGroupCount(ballPins, ballPinCount);
+  int sampleStrikes = readGroupCount(strikePins, strikePinCount);
+  int sampleOuts    = readGroupCount(outPins, outPinCount);
   int sampleRun     = (digitalRead(runPin) == LOW) ? 1 : 0;
   
   if (lastSampleValid &&
